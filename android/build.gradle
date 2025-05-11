@@ -1,0 +1,98 @@
+group = "com.leapwardkoex.simple_torrent.simple_torrent"
+version = "1.0-SNAPSHOT"
+
+buildscript {
+    ext.kotlin_version = "1.8.22"
+    repositories {
+        google()
+        mavenCentral()
+        maven { 
+            url "http://4thline.org/m2/"
+            allowInsecureProtocol = true
+       }
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.7.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { 
+            url "http://4thline.org/m2/"
+            allowInsecureProtocol = true
+       }
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+android {
+    namespace = "com.leapwardkoex.simple_torrent.simple_torrent"
+
+    compileSdk = 35
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+        test.java.srcDirs += "src/test/kotlin"
+    }
+
+    defaultConfig {
+        minSdk = 34
+    }
+
+    dependencies {
+        // ───────────────────────── test libs ─────────────────────────
+        testImplementation 'org.jetbrains.kotlin:kotlin-test'
+        testImplementation 'org.mockito:mockito-core:5.0.0'
+
+        // ──────────────────────── Bt + extras ────────────────────────
+        implementation('com.github.atomashpolskiy:bt-core:1.10') {
+            exclude group: 'com.google.inject', module: 'guice'
+        }
+        implementation('com.github.atomashpolskiy:bt-http-tracker-client:1.10') {
+            exclude group: 'com.google.inject', module: 'guice'
+            exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+            exclude group: 'org.apache.httpcomponents', module: 'httpcore'
+        }
+        implementation('com.github.atomashpolskiy:bt-dht:1.10') {
+            exclude group: 'com.google.inject', module: 'guice'
+        }
+
+        // ─────────────────────── replacement jars ───────────────────
+        implementation files('libs/guice-4.2.3-no_aop.jar')
+        implementation ('org.apache.httpcomponents:httpclient-android:4.3.3') {
+            // make extra‑sure no external httpcore sneaks in
+            exclude group: 'org.apache.httpcomponents', module: 'httpcore'
+        }
+        // implementation 'org.apache.httpcomponents:httpcore:4.3.3'
+
+        implementation 'org.slf4j:slf4j-simple:2.0.13'
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+
+            testLogging {
+               events "passed", "skipped", "failed", "standardOut", "standardError"
+               outputs.upToDateWhen {false}
+               showStandardStreams = true
+            }
+        }
+    }
+}
