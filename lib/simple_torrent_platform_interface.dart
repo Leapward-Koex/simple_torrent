@@ -32,6 +32,7 @@ class TorrentProgress {
   final int piecesComplete;
   final int piecesRemaining;
   final double progress;
+  final int peers;
 
   const TorrentProgress({
     required this.id,
@@ -42,6 +43,7 @@ class TorrentProgress {
     required this.piecesComplete,
     required this.piecesRemaining,
     required this.progress,
+    required this.peers,
   });
 
   factory TorrentProgress.fromMap(Map<dynamic, dynamic> m) => TorrentProgress(
@@ -53,5 +55,6 @@ class TorrentProgress {
     piecesComplete: m['piecesComplete'] as int,
     piecesRemaining: m['piecesRemaining'] as int,
     progress: (m['progress'] as num).toDouble(),
+    peers: m['peers'] as int,
   );
 }

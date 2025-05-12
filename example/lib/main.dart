@@ -80,6 +80,8 @@ class _MyAppState extends State<MyApp> {
                                       title: Text(p.id),
                                       subtitle: Text(
                                         '${p.progress.toStringAsFixed(1)} % • '
+                                        'peers: ${p.peers} • '
+                                        'pieces: ${p.piecesComplete} / ${p.piecesTotal} • '
                                         '${_fmtBytes(p.downloaded)} / '
                                         '${_fmtBytes(p.downloaded + p.left)}',
                                       ),

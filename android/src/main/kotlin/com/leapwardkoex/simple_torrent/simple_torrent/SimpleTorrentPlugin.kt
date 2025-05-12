@@ -4,6 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import bt.Bt
 import bt.data.file.FileSystemStorage
+import bt.net.ConnectionKey
+import bt.net.Peer
 import bt.runtime.BtClient
 import bt.torrent.TorrentSessionState
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -136,28 +138,32 @@ class SimpleTorrentPlugin : FlutterPlugin,
     private var isPaused = false
 
     private val stateCallback: (TorrentSessionState) -> Unit = { s ->
-      val downloaded = s.downloaded
-      val uploaded   = s.uploaded
-      val left       = s.left.takeIf { it != TorrentSessionState.UNKNOWN } ?: 0L
-      val piecesTot  = s.piecesTotal
-      val piecesComp = s.piecesComplete
-      val piecesRem  = s.piecesRemaining
-      val progress   = if (piecesTot > 0) piecesComp * 100.0 / piecesTot else 0.0
+      val downloaded  = s.downloaded
+      val uploaded    = s.uploaded
+      val left        = s.left.takeIf { it != TorrentSessionState.UNKNOWN } ?: 0L
+      val piecesTot   = s.piecesTotal
+      val piecesComp  = s.piecesComplete
+      val piecesRem   = s.piecesRemaining
+      val progress    = if (piecesTot > 0) piecesComp * 100.0 / piecesTot else 0.0
+
+      /* ─────────────── peer stats ─────────────── */
+      val peers       = s.connectedPeers                      // Set<ConnectionKey>
+      val totalPeers  = peers.size
 
       push(
         mapOf(
-          "id" to id,
-          "downloaded" to downloaded,
-          "uploaded" to uploaded,
-          "left" to left,
-          "piecesTotal" to piecesTot,
-          "piecesComplete" to piecesComp,
-          "piecesRemaining" to piecesRem,
-          "progress" to progress
+          "id"               to id,
+          "downloaded"       to downloaded,
+          "uploaded"         to uploaded,
+          "left"            to left,
+          "piecesTotal"      to piecesTot,
+          "piecesComplete"   to piecesComp,
+          "piecesRemaining"  to piecesRem,
+          "progress"         to progress,
+          "peers"            to totalPeers,
         )
       )
 
-      // Detect completion (all pieces downloaded)
       if (piecesRem == 0 && !isPaused) {
         finished(id)
       }
