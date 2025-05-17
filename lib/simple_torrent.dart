@@ -1,6 +1,6 @@
 library;
 
-export 'simple_torrent_platform_interface.dart' show TorrentProgress;
+export 'simple_torrent_platform_interface.dart' show TorrentStats;
 
 import 'simple_torrent_platform_interface.dart';
 
@@ -12,11 +12,11 @@ class SimpleTorrent {
 
   static Future<void> init({int concurrency = 2}) => _p.init(concurrency: concurrency);
 
-  static Future<String> start({required String magnet, required String path}) => _p.start(magnet: magnet, path: path);
+  static Future<int> start({required String magnet, required String path}) => _p.start(magnet: magnet, path: path);
 
-  static Future<void> pause(String id) => _p.pause(id);
-  static Future<void> resume(String id) => _p.resume(id);
-  static Future<void> cancel(String id) => _p.cancel(id);
+  static Future<void> pause(int id) => _p.pause(id);
+  static Future<void> resume(int id) => _p.resume(id);
+  static Future<void> cancel(int id) => _p.cancel(id);
 
-  static Stream<TorrentProgress> get progressStream => _p.progressStream;
+  static Stream<TorrentStats> get statsStream => _p.statsStream;
 }

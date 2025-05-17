@@ -1,0 +1,1 @@
+C:\Dev\boost_1_88_0\dist\bin\bcp.exe --boost=C:\Dev\boost_1_88_0\ --scan "C:\Dev\libtorrent\include\libtorrent\session.hpp" "C:\Dev\libtorrent\include\libtorrent\alert_types.hpp" "C:\Dev\libtorrent\include\libtorrent\magnet_uri.hpp" "C:\Dev\boost_1_88_0\dist\bin\boost_min"

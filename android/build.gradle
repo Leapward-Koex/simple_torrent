@@ -52,34 +52,38 @@ android {
     }
 
     defaultConfig {
-        minSdk = 34
+        minSdk = 24
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_static", "-DANDROID_PLATFORM=android-24"
+            }
+        }
+        // ndk { abiFilters "armeabi-v7a", "arm64-v8a", "x86_64" }
+        ndk { abiFilters "arm64-v8a" }
+    }
+
+    packagingOptions {
+        pickFirst "**/libc++_shared.so"
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            // The default CMake version for the Android Gradle Plugin is 3.10.2.
+            // https://developer.android.com/studio/projects/install-ndk#vanilla_cmake
+            //
+            // The Flutter tooling requires that developers have CMake 3.10 or later
+            // installed. You should not increase this version, as doing so will cause
+            // the plugin to fail to compile for some customers of the plugin.
+            // version "3.10.2"
+        }
     }
 
     dependencies {
         // ───────────────────────── test libs ─────────────────────────
         testImplementation 'org.jetbrains.kotlin:kotlin-test'
         testImplementation 'org.mockito:mockito-core:5.0.0'
-
-        // ──────────────────────── Bt + extras ────────────────────────
-        implementation('com.github.atomashpolskiy:bt-core:1.10') {
-            exclude group: 'com.google.inject', module: 'guice'
-        }
-        implementation('com.github.atomashpolskiy:bt-http-tracker-client:1.10') {
-            exclude group: 'com.google.inject', module: 'guice'
-            exclude group: 'org.apache.httpcomponents', module: 'httpclient'
-            exclude group: 'org.apache.httpcomponents', module: 'httpcore'
-        }
-        implementation('com.github.atomashpolskiy:bt-dht:1.10') {
-            exclude group: 'com.google.inject', module: 'guice'
-        }
-
-        // ─────────────────────── replacement jars ───────────────────
-        implementation files('libs/guice-4.2.3-no_aop.jar')
-        implementation ('org.apache.httpcomponents:httpclient-android:4.3.3') {
-            // make extra‑sure no external httpcore sneaks in
-            exclude group: 'org.apache.httpcomponents', module: 'httpcore'
-        }
-        // implementation 'org.apache.httpcomponents:httpcore:4.3.3'
 
         implementation 'org.slf4j:slf4j-simple:2.0.13'
     }

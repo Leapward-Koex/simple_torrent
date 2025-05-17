@@ -1,7 +1,7 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'simple_torrent_method_channel.dart';
 
-/// Cross‑platform contract.
+/// Cross-platform contract.
 abstract class SimpleTorrentPlatform extends PlatformInterface {
   SimpleTorrentPlatform() : super(token: _token);
   static final Object _token = Object();
@@ -15,46 +15,45 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
   }
 
   Future<void> init({int concurrency = 2});
-  Future<String> start({required String magnet, required String path});
-  Future<void> pause(String id);
-  Future<void> resume(String id);
-  Future<void> cancel(String id);
-  Stream<TorrentProgress> get progressStream;
+  Future<int> start({required String magnet, required String path});
+  Future<void> pause(int id);
+  Future<void> resume(int id);
+  Future<void> cancel(int id);
+
+  /// Stream of [TorrentStats] for *all* torrents.
+  Stream<TorrentStats> get statsStream;
 }
 
-/// Typed progress payload.
-class TorrentProgress {
-  final String id;
-  final int downloaded;
-  final int uploaded;
-  final int left;
+/// Strongly-typed progress payload.
+class TorrentStats {
+  final int id;
+  final int downloadRate; // bytes/s
+  final int uploadRate; // bytes/s
+  final int pieces;
   final int piecesTotal;
-  final int piecesComplete;
-  final int piecesRemaining;
-  final double progress;
+  final int progress; // 0-100
+  final int seeds;
   final int peers;
 
-  const TorrentProgress({
+  const TorrentStats({
     required this.id,
-    required this.downloaded,
-    required this.uploaded,
-    required this.left,
+    required this.downloadRate,
+    required this.uploadRate,
+    required this.pieces,
     required this.piecesTotal,
-    required this.piecesComplete,
-    required this.piecesRemaining,
     required this.progress,
+    required this.seeds,
     required this.peers,
   });
 
-  factory TorrentProgress.fromMap(Map<dynamic, dynamic> m) => TorrentProgress(
-    id: m['id'] as String,
-    downloaded: m['downloaded'] as int,
-    uploaded: m['uploaded'] as int,
-    left: m['left'] as int,
-    piecesTotal: m['piecesTotal'] as int,
-    piecesComplete: m['piecesComplete'] as int,
-    piecesRemaining: m['piecesRemaining'] as int,
-    progress: (m['progress'] as num).toDouble(),
+  factory TorrentStats.fromMap(Map<dynamic, dynamic> m) => TorrentStats(
+    id: m['id'] as int,
+    downloadRate: m['download_rate'] as int,
+    uploadRate: m['upload_rate'] as int,
+    pieces: m['pieces'] as int,
+    piecesTotal: m['pieces_total'] as int,
+    progress: m['progress'] as int,
+    seeds: m['seeds'] as int,
     peers: m['peers'] as int,
   );
 }
