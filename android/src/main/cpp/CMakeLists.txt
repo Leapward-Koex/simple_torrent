@@ -18,7 +18,10 @@ set_target_properties(libtorrent PROPERTIES
 )
 
 # ───── 3. Your plugin’s native code ─────────────────────────────────────
-file(GLOB PLUGIN_SRC "*.cpp")
+set(PLUGIN_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/torrent_core.cpp      # JNI layer (tiny)
+    ${CMAKE_CURRENT_SOURCE_DIR}/torrent_plugin.cpp                   # platform-neutral libtorrent logic
+)
 add_library(torrent_plugin SHARED ${PLUGIN_SRC})
 
 target_include_directories(torrent_plugin
