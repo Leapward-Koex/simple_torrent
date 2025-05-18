@@ -2,11 +2,13 @@ package com.leapwardkoex.simple_torrent.simple_torrent
 
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.Keep
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
+@Keep
 class SimpleTorrentPlugin : FlutterPlugin,
     MethodChannel.MethodCallHandler,
     EventChannel.StreamHandler {
@@ -15,6 +17,7 @@ class SimpleTorrentPlugin : FlutterPlugin,
         private var active: SimpleTorrentPlugin? = null
         private val main = Handler(Looper.getMainLooper())
 
+        @Keep
         @JvmStatic
         fun sendStats(stats: Map<String, Int>) {
             main.post { active?.eventSink?.success(stats) }
@@ -26,9 +29,13 @@ class SimpleTorrentPlugin : FlutterPlugin,
     private var eventSink: EventChannel.EventSink? = null
 
     // ── native interface ────────────────────────────────────────────────
+    @Keep
     private external fun startTorrent(magnet: String, dest: String): Int
+    @Keep
     private external fun pauseTorrent(id: Int)
+    @Keep
     private external fun resumeTorrent(id: Int)
+    @Keep
     private external fun cancelTorrent(id: Int)
 
     // ── FlutterPlugin lifecycle ─────────────────────────────────────────
