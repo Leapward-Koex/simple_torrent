@@ -19,4 +19,5 @@ class SimpleTorrent {
   static Future<void> cancel(int id) => _p.cancel(id);
 
   static Stream<TorrentStats> get statsStream => _p.statsStream;
+  static Stream<TorrentMetadata> get metadataStream => _p.metadataStream;
 }

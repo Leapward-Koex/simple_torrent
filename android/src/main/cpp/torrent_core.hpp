@@ -5,6 +5,7 @@
 #include <functional>
 #include <mutex>
 #include <unordered_map>
+#include <libtorrent/torrent_info.hpp>
 
 namespace tc
 {
@@ -21,7 +22,21 @@ namespace tc
         int peers = 0;
     };
 
+    struct Metadata
+    {
+        int                 id            = 0;
+        std::string         name;                 // display name
+        std::int64_t        totalBytes    = 0;    // overall payload size
+        int                 pieceSize     = 0;    // bytes per piece
+        int                 pieceCount    = 0;
+        int                 fileCount     = 0;
+        std::time_t         creationDate  = 0;    // 0 if field absent
+        bool                isPrivate     = false;
+        bool                isV2          = false;
+    };
+
     using StatsCb = std::function<void(const Stats &)>;
+    using MetadataCb = std::function<void(const Metadata &)>;
 
     class Manager
     {
@@ -31,7 +46,7 @@ namespace tc
 
         // returns 0 on failure
         int start(const std::string &magnet, const std::string &path,
-                  StatsCb cb);
+                  StatsCb cb, MetadataCb metaCb);
         void pause(int id);
         void resume(int id);
         void cancel(int id);
@@ -39,8 +54,9 @@ namespace tc
     private:
         struct Entry
         {
-            libtorrent::torrent_handle h;
-            StatsCb cb;
+            libtorrent::torrent_handle torrentHandle;
+            StatsCb statsCallback;
+            MetadataCb metaCallback;
         };
 
         void poll(int id);
