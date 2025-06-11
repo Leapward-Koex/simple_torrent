@@ -22,6 +22,9 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
 
   /// Stream of [TorrentStats] for *all* torrents.
   Stream<TorrentStats> get statsStream;
+
+  /// Stream of [TorrentMetadata] for *all* torrents.
+  Stream<TorrentMetadata> get metadataStream;
 }
 
 /// Strongly-typed progress payload.
@@ -55,5 +58,41 @@ class TorrentStats {
     progress: m['progress'] as int,
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
+  );
+}
+
+class TorrentMetadata {
+  final int id;
+  final String name; // bytes/s
+  final int totalBytes; // bytes/s
+  final int pieceSize;
+  final int pieceCount;
+  final int fileCount; // 0-100
+  final int creationDate;
+  final bool isPrivate;
+  final bool isV2;
+
+  const TorrentMetadata({
+    required this.id,
+    required this.name,
+    required this.totalBytes,
+    required this.pieceSize,
+    required this.pieceCount,
+    required this.fileCount,
+    required this.creationDate,
+    required this.isPrivate,
+    required this.isV2,
+  });
+
+  factory TorrentMetadata.fromMap(Map<dynamic, dynamic> m) => TorrentMetadata(
+    id: m['id'] as int,
+    name: m['name'] as String,
+    totalBytes: m['total_bytes'] as int,
+    pieceSize: m['piece_size'] as int,
+    pieceCount: m['piece_count'] as int,
+    fileCount: m['file_count'] as int,
+    creationDate: m['creation_date'] as int,
+    isPrivate: m['private'] as bool,
+    isV2: m['v2'] as bool,
   );
 }

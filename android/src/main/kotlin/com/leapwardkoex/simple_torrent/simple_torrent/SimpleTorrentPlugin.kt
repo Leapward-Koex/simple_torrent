@@ -10,8 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 
 @Keep
 class SimpleTorrentPlugin : FlutterPlugin,
-    MethodChannel.MethodCallHandler,
-    EventChannel.StreamHandler {
+    MethodChannel.MethodCallHandler{
 
     companion object {
         private var active: SimpleTorrentPlugin? = null
@@ -20,13 +19,21 @@ class SimpleTorrentPlugin : FlutterPlugin,
         @Keep
         @JvmStatic
         fun sendStats(stats: Map<String, Int>) {
-            main.post { active?.eventSink?.success(stats) }
+            main.post { active?.progressSink?.success(stats) }
+        }
+
+        @Keep
+        @JvmStatic
+        fun sendMetadata(metadata: Map<String, Any>) {
+            main.post { active?.metadataSink?.success(metadata) }
         }
     }
 
     private lateinit var methodChannel: MethodChannel
     private lateinit var progressChannel: EventChannel
-    private var eventSink: EventChannel.EventSink? = null
+    private lateinit var metadataChannel: EventChannel
+    private var progressSink: EventChannel.EventSink? = null
+    private var metadataSink: EventChannel.EventSink? = null
 
     // ── native interface ────────────────────────────────────────────────
     @Keep
@@ -43,9 +50,26 @@ class SimpleTorrentPlugin : FlutterPlugin,
         active = this
         methodChannel = MethodChannel(binding.binaryMessenger, "simple_torrent/methods")
         progressChannel = EventChannel(binding.binaryMessenger, "simple_torrent/progress")
-        methodChannel.setMethodCallHandler(this)
-        progressChannel.setStreamHandler(this)
+        metadataChannel = EventChannel(binding.binaryMessenger, "simple_torrent/metadata")
 
+        methodChannel.setMethodCallHandler(this)
+        progressChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                progressSink = events
+            }
+            override fun onCancel(arguments: Any?) {
+                progressSink = null
+            }
+        })
+
+        metadataChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                metadataSink = events
+            }
+            override fun onCancel(arguments: Any?) {
+                metadataSink = null
+            }
+        })
         // load native libraries once
         System.loadLibrary("torrent-rasterbar")
         System.loadLibrary("torrent_plugin")
@@ -55,6 +79,7 @@ class SimpleTorrentPlugin : FlutterPlugin,
         active = null
         methodChannel.setMethodCallHandler(null)
         progressChannel.setStreamHandler(null)
+        metadataChannel.setStreamHandler(null)
     }
 
     // ── MethodChannel handling ─────────────────────────────────────────
@@ -77,8 +102,4 @@ class SimpleTorrentPlugin : FlutterPlugin,
             else        -> result.notImplemented()
         }
     }
-
-    // ── EventChannel plumbing ──────────────────────────────────────────
-    override fun onListen(arguments: Any?, events: EventChannel.EventSink) { eventSink = events }
-    override fun onCancel(arguments: Any?) { eventSink = null }
 }

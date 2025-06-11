@@ -6,8 +6,12 @@ import 'simple_torrent_platform_interface.dart';
 class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   static const _methods = MethodChannel('simple_torrent/methods');
   static const _events = EventChannel('simple_torrent/progress');
+  static const _metaData = EventChannel('simple_torrent/metadata');
 
   late final Stream<TorrentStats> _stats$ = _events.receiveBroadcastStream().map((e) => TorrentStats.fromMap(e as Map<dynamic, dynamic>));
+  late final Stream<TorrentMetadata> _metaData$ = _metaData.receiveBroadcastStream().map(
+    (e) => TorrentMetadata.fromMap(e as Map<dynamic, dynamic>),
+  );
 
   @override
   Future<void> init({int concurrency = 2}) => _methods.invokeMethod('init', {'concurrency': concurrency});
@@ -27,4 +31,7 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
 
   @override
   Stream<TorrentStats> get statsStream => _stats$;
+
+  @override
+  Stream<TorrentMetadata> get metadataStream => _metaData$;
 }
