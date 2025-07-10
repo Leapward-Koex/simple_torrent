@@ -60,6 +60,8 @@ static void statsToJava(const tc::Stats &s)
     PUT("progress", s.progressPct)
     PUT("seeds", s.seeds)
     PUT("peers", s.peers)
+    PUT_STR("phase", s.phase);
+
 #undef PUT
 #undef PUT_STR
 

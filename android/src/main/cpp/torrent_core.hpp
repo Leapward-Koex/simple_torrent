@@ -20,6 +20,7 @@ namespace tc
         int progressPct = 0;
         int seeds = 0;
         int peers = 0;
+        std::string phase;
     };
 
     struct Metadata
@@ -50,6 +51,7 @@ namespace tc
         void pause(int id);
         void resume(int id);
         void cancel(int id);
+        void finalise(int id);
 
     private:
         struct Entry
