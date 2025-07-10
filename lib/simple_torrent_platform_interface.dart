@@ -37,6 +37,7 @@ class TorrentStats {
   final int progress; // 0-100
   final int seeds;
   final int peers;
+  final String phase;
 
   const TorrentStats({
     required this.id,
@@ -47,6 +48,7 @@ class TorrentStats {
     required this.progress,
     required this.seeds,
     required this.peers,
+    required this.phase,
   });
 
   factory TorrentStats.fromMap(Map<dynamic, dynamic> m) => TorrentStats(
@@ -58,6 +60,7 @@ class TorrentStats {
     progress: m['progress'] as int,
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
+    phase: m['phase'] as String,
   );
 }
 
