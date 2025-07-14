@@ -8,6 +8,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.*
 import java.util.Collections
 
 @Keep
@@ -19,11 +20,12 @@ class SimpleTorrentPlugin : FlutterPlugin,
             Collections.synchronizedSet(mutableSetOf<SimpleTorrentPlugin>())
         private val mainHandler = Handler(Looper.getMainLooper())
         private const val TAG = "SimpleTorrentPlugin"
+        private const val METHOD_TIMEOUT_MS = 10000L // 10 seconds
 
         // ── static bridge for native code ──────────────────────────────
         @Keep
         @JvmStatic
-        fun sendStats(stats: Map<String, Int>) {
+        fun sendStats(stats: Map<String, Any>) {
             Log.d(TAG, "sendStats: $stats")
             mainHandler.post {
                 synchronized(pluginInstances) {
@@ -53,15 +55,21 @@ class SimpleTorrentPlugin : FlutterPlugin,
     private lateinit var metadataChannel: EventChannel
     private var progressSink: EventChannel.EventSink? = null
     private var metadataSink: EventChannel.EventSink? = null
+    
+    // Coroutine scope for async operations
+    private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // Buffer for stats and metadata when no listener is active
-    private val statsBuffer = mutableListOf<Map<String, Int>>()
+    private val statsBuffer = mutableListOf<Map<String, Any>>()
     private val metadataBuffer = mutableListOf<Map<String, Any>>()
     private val maxBufferSize = 10 // Keep only the latest 10 items
 
     // ── native interface ────────────────────────────────────────────────
     @Keep
     private external fun startTorrent(magnet: String, dest: String): Int
+
+    @Keep
+    private external fun startTorrentWithName(magnet: String, dest: String, name: String): Int
 
     @Keep
     private external fun pauseTorrent(id: Int)
@@ -71,6 +79,24 @@ class SimpleTorrentPlugin : FlutterPlugin,
 
     @Keep
     private external fun cancelTorrent(id: Int)
+
+    @Keep
+    private external fun getActiveTorrentIds(): IntArray
+
+    @Keep
+    private external fun torrentExists(id: Int): Boolean
+
+    @Keep
+    private external fun getTorrentState(id: Int): String
+
+    @Keep
+    private external fun getTorrentInfo(id: Int): Map<String, Any>
+
+    @Keep
+    private external fun getLastError(id: Int): String
+
+    @Keep
+    private external fun applyConfig(config: Map<String, Any>)
 
     // ── FlutterPlugin lifecycle ─────────────────────────────────────────
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -138,6 +164,9 @@ class SimpleTorrentPlugin : FlutterPlugin,
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         pluginInstances.remove(this)
 
+        // Cancel all running coroutines
+        coroutineScope.cancel()
+
         methodChannel.setMethodCallHandler(null)
         progressChannel.setStreamHandler(null)
         metadataChannel.setStreamHandler(null)
@@ -152,7 +181,7 @@ class SimpleTorrentPlugin : FlutterPlugin,
     }
 
     // ── Internal handlers for buffering and sending data ───────────────
-    private fun handleStatsUpdate(stats: Map<String, Int>) {
+    private fun handleStatsUpdate(stats: Map<String, Any>) {
         val sink = progressSink
         if (sink != null) {
             try {
@@ -161,13 +190,14 @@ class SimpleTorrentPlugin : FlutterPlugin,
                 return
             } catch (exception: Exception) {
                 Log.w(TAG, "Failed to send stats: ${exception.message}")
+                progressSink = null // Clear invalid sink
             }
         }
         // Buffer the stats if send failed or no listener
         synchronized(statsBuffer) {
             statsBuffer.add(stats)
             while (statsBuffer.size > maxBufferSize) {
-                statsBuffer.removeAt(0);
+                statsBuffer.removeAt(0)
             }
         }
         Log.d(TAG, "Stats buffered, current buffer size: ${statsBuffer.size}")
@@ -182,13 +212,14 @@ class SimpleTorrentPlugin : FlutterPlugin,
                 return
             } catch (exception: Exception) {
                 Log.w(TAG, "Failed to send metadata: ${exception.message}")
+                metadataSink = null // Clear invalid sink
             }
         }
         // Buffer the metadata if send failed or no listener
         synchronized(metadataBuffer) {
             metadataBuffer.add(metadata)
             while (metadataBuffer.size > maxBufferSize) {
-                metadataBuffer.removeFirst()
+                metadataBuffer.removeAt(0)
             }
         }
         Log.d(TAG, "Metadata buffered, current buffer size: ${metadataBuffer.size}")
@@ -197,34 +228,206 @@ class SimpleTorrentPlugin : FlutterPlugin,
     // ── MethodChannel handling ─────────────────────────────────────────
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "start" -> {
-                val magnet = call.argument<String>("magnet")
-                val destination = call.argument<String>("destination")
-                if (magnet.isNullOrEmpty() || destination.isNullOrEmpty()) {
-                    result.error("INVALID_ARGS", "magnet and destination are required", null)
-                } else {
-                    val torrentId = startTorrent(magnet, destination)
-                    if (torrentId == 0) {
-                        result.error("FAILED", "could not start torrent", null)
-                    } else {
-                        result.success(torrentId)
+            "init" -> {
+                coroutineScope.launch {
+                    try {
+                        val config = call.argument<Map<String, Any>>("config")
+                        if (config != null) {
+                            Log.d(TAG, "Init called with config: $config")
+                            withContext(Dispatchers.IO) {
+                                applyConfig(config)
+                            }
+                            Log.d(TAG, "Configuration applied successfully")
+                        } else {
+                            Log.d(TAG, "Init called without config - using defaults")
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to apply configuration: ${e.message}")
+                        result.error("ERROR", "Failed to initialize: ${e.message}", null)
                     }
                 }
             }
 
-            "pause" -> call.argument<Int>("id")?.let {
-                pauseTorrent(it)
-                result.success(null)
+            "start" -> {
+                val magnet = call.argument<String>("magnet")
+                val destination = call.argument<String>("destination")
+                val displayName = call.argument<String>("displayName")
+                
+                if (magnet.isNullOrEmpty() || destination.isNullOrEmpty()) {
+                    result.error("INVALID_ARGS", "magnet and destination are required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val torrentId = withTimeoutOrNull(METHOD_TIMEOUT_MS) {
+                            withContext(Dispatchers.IO) {
+                                if (displayName.isNullOrEmpty()) {
+                                    startTorrent(magnet, destination)
+                                } else {
+                                    startTorrentWithName(magnet, destination, displayName)
+                                }
+                            }
+                        }
+                        
+                        if (torrentId == null) {
+                            result.error("TIMEOUT", "Torrent start operation timed out", null)
+                        } else if (torrentId == 0) {
+                            result.error("FAILED", "Could not start torrent", null)
+                        } else {
+                            result.success(torrentId)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to start torrent: ${e.message}", null)
+                    }
+                }
             }
 
-            "resume" -> call.argument<Int>("id")?.let {
-                resumeTorrent(it)
-                result.success(null)
+            "pause" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            pauseTorrent(id)
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to pause torrent: ${e.message}", null)
+                    }
+                }
             }
 
-            "cancel" -> call.argument<Int>("id")?.let {
-                cancelTorrent(it)
-                result.success(null)
+            "resume" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            resumeTorrent(id)
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to resume torrent: ${e.message}", null)
+                    }
+                }
+            }
+
+            "cancel" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            cancelTorrent(id)
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to cancel torrent: ${e.message}", null)
+                    }
+                }
+            }
+
+            "getActiveTorrentIds" -> {
+                coroutineScope.launch {
+                    try {
+                        val ids = withContext(Dispatchers.IO) {
+                            getActiveTorrentIds().toList()
+                        }
+                        result.success(ids)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to get active torrents: ${e.message}", null)
+                    }
+                }
+            }
+
+            "exists" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val exists = withContext(Dispatchers.IO) {
+                            torrentExists(id)
+                        }
+                        result.success(exists)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to check torrent existence: ${e.message}", null)
+                    }
+                }
+            }
+
+            "getState" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val state = withContext(Dispatchers.IO) {
+                            getTorrentState(id)
+                        }
+                        result.success(state)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to get torrent state: ${e.message}", null)
+                    }
+                }
+            }
+
+            "getTorrentInfo" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val info = withContext(Dispatchers.IO) {
+                            getTorrentInfo(id)
+                        }
+                        result.success(info)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to get torrent info: ${e.message}", null)
+                    }
+                }
+            }
+
+            "getLastError" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val error = withContext(Dispatchers.IO) {
+                            getLastError(id)
+                        }
+                        result.success(error)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to get error: ${e.message}", null)
+                    }
+                }
             }
 
             else -> result.notImplemented()
