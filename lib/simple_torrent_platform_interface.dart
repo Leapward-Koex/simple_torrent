@@ -1,6 +1,128 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'simple_torrent_method_channel.dart';
 
+enum TorrentState { starting, downloadingMetadata, downloading, seeding, paused, error, stopped }
+
+extension TorrentStateExtension on TorrentState {
+  static TorrentState fromString(String value) {
+    switch (value) {
+      case 'starting':
+        return TorrentState.starting;
+      case 'downloading_metadata':
+        return TorrentState.downloadingMetadata;
+      case 'downloading':
+        return TorrentState.downloading;
+      case 'seeding':
+        return TorrentState.seeding;
+      case 'paused':
+        return TorrentState.paused;
+      case 'error':
+        return TorrentState.error;
+      case 'stopped':
+        return TorrentState.stopped;
+      default:
+        return TorrentState.error;
+    }
+  }
+
+  String get displayName {
+    switch (this) {
+      case TorrentState.starting:
+        return 'Starting';
+      case TorrentState.downloadingMetadata:
+        return 'Downloading Metadata';
+      case TorrentState.downloading:
+        return 'Downloading';
+      case TorrentState.seeding:
+        return 'Seeding';
+      case TorrentState.paused:
+        return 'Paused';
+      case TorrentState.error:
+        return 'Error';
+      case TorrentState.stopped:
+        return 'Stopped';
+    }
+  }
+}
+
+/// Torrent configuration options
+class TorrentConfig {
+  final int maxTorrents;
+  final int maxDownloadRate; // KB/s, 0 = unlimited
+  final int maxUploadRate; // KB/s, 0 = unlimited
+  final bool enableDHT;
+  final String userAgent;
+
+  const TorrentConfig({
+    this.maxTorrents = 20,
+    this.maxDownloadRate = 0,
+    this.maxUploadRate = 0,
+    this.enableDHT = true,
+    this.userAgent = 'simple_torrent/1.0',
+  });
+
+  /// Convert configuration to a map for platform channels
+  Map<String, dynamic> toMap() {
+    return {
+      'maxTorrents': maxTorrents,
+      'maxDownloadRate': maxDownloadRate,
+      'maxUploadRate': maxUploadRate,
+      'enableDHT': enableDHT,
+      'userAgent': userAgent,
+    };
+  }
+
+  /// Create configuration from a map
+  factory TorrentConfig.fromMap(Map<String, dynamic> map) {
+    return TorrentConfig(
+      maxTorrents: map['maxTorrents'] as int? ?? 20,
+      maxDownloadRate: map['maxDownloadRate'] as int? ?? 0,
+      maxUploadRate: map['maxUploadRate'] as int? ?? 0,
+      enableDHT: map['enableDHT'] as bool? ?? true,
+      userAgent: map['userAgent'] as String? ?? 'simple_torrent/1.0',
+    );
+  }
+
+  @override
+  String toString() {
+    return 'TorrentConfig(maxTorrents: $maxTorrents, maxDownloadRate: $maxDownloadRate, '
+           'maxUploadRate: $maxUploadRate, enableDHT: $enableDHT, userAgent: $userAgent)';
+  }
+}
+
+/// Torrent information
+class TorrentInfo {
+  final int id;
+  final String magnetUri;
+  final String savePath;
+  final String displayName;
+  final TorrentState state;
+  final String lastError;
+  final DateTime createdAt;
+
+  const TorrentInfo({
+    required this.id,
+    required this.magnetUri,
+    required this.savePath,
+    required this.displayName,
+    required this.state,
+    required this.lastError,
+    required this.createdAt,
+  });
+
+  factory TorrentInfo.fromMap(Map<dynamic, dynamic> map) {
+    return TorrentInfo(
+      id: map['id'] as int,
+      magnetUri: map['magnetUri'] as String,
+      savePath: map['savePath'] as String,
+      displayName: map['displayName'] as String,
+      state: TorrentStateExtension.fromString(map['state'] as String),
+      lastError: map['lastError'] as String,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
+    );
+  }
+}
+
 /// Cross-platform contract.
 abstract class SimpleTorrentPlatform extends PlatformInterface {
   SimpleTorrentPlatform() : super(token: _token);
@@ -14,17 +136,30 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future<void> init({int concurrency = 2});
-  Future<int> start({required String magnet, required String path});
+  Future<void> init({TorrentConfig? config});
+  Future<void> updateConfig(TorrentConfig config);
+  Future<int> start({required String magnet, required String path, String? displayName});
   Future<void> pause(int id);
   Future<void> resume(int id);
   Future<void> cancel(int id);
+
+  // New management API
+  Future<List<int>> getActiveTorrentIds();
+  Future<bool> exists(int id);
+  Future<TorrentState> getState(int id);
+  Future<TorrentInfo> getTorrentInfo(int id);
+  Future<String> getLastError(int id);
 
   /// Stream of [TorrentStats] for *all* torrents.
   Stream<TorrentStats> get statsStream;
 
   /// Stream of [TorrentMetadata] for *all* torrents.
   Stream<TorrentMetadata> get metadataStream;
+
+  /// Get a stream for a specific torrent
+  Stream<TorrentStats> statsFor(int id) {
+    return statsStream.where((stats) => stats.id == id);
+  }
 }
 
 /// Strongly-typed progress payload.
@@ -38,6 +173,7 @@ class TorrentStats {
   final int seeds;
   final int peers;
   final String phase;
+  final TorrentState? state; // Optional for backward compatibility
 
   const TorrentStats({
     required this.id,
@@ -49,7 +185,13 @@ class TorrentStats {
     required this.seeds,
     required this.peers,
     required this.phase,
+    this.state,
   });
+
+  // Convenience getters for backward compatibility
+  int get dlRate => downloadRate;
+  int get ulRate => uploadRate;
+  int get progressPct => progress;
 
   factory TorrentStats.fromMap(Map<dynamic, dynamic> m) => TorrentStats(
     id: m['id'] as int,
@@ -61,6 +203,7 @@ class TorrentStats {
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
     phase: m['phase'] as String,
+    state: m['state'] != null ? TorrentStateExtension.fromString(m['state'] as String) : null,
   );
 }
 
