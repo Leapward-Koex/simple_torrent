@@ -1,4 +1,4 @@
-#include "torrent_core.hpp"
+#include "../../shared/torrent_core/torrent_core.hpp"
 #include <jni.h>
 #include <mutex>
 
