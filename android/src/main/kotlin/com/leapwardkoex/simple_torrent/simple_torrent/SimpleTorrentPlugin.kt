@@ -26,7 +26,6 @@ class SimpleTorrentPlugin : FlutterPlugin,
         @Keep
         @JvmStatic
         fun sendStats(stats: Map<String, Any>) {
-            Log.d(TAG, "sendStats: $stats")
             mainHandler.post {
                 synchronized(pluginInstances) {
                     pluginInstances.forEach { plugin ->
@@ -186,7 +185,6 @@ class SimpleTorrentPlugin : FlutterPlugin,
         if (sink != null) {
             try {
                 sink.success(stats)
-                Log.v(TAG, "Stats sent to active listener")
                 return
             } catch (exception: Exception) {
                 Log.w(TAG, "Failed to send stats: ${exception.message}")
@@ -208,7 +206,6 @@ class SimpleTorrentPlugin : FlutterPlugin,
         if (sink != null) {
             try {
                 sink.success(metadata)
-                Log.v(TAG, "Metadata sent to active listener")
                 return
             } catch (exception: Exception) {
                 Log.w(TAG, "Failed to send metadata: ${exception.message}")
