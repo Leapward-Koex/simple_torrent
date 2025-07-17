@@ -5,6 +5,15 @@
 #include <flutter/plugin_registrar_windows.h>
 
 #include <memory>
+#include <unordered_map>
+#include <functional>
+
+// Forward declaration
+namespace tc {
+  class Manager;
+  struct Stats;
+  struct Metadata;
+}
 
 namespace simple_torrent {
 
@@ -24,6 +33,11 @@ class SimpleTorrentPlugin : public flutter::Plugin {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue> &method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+ private:
+  std::unique_ptr<tc::Manager> manager_;
+  std::unordered_map<int, std::pair<std::function<void(const tc::Stats&)>, 
+                                   std::function<void(const tc::Metadata&)>>> callbacks_;
 };
 
 }  // namespace simple_torrent

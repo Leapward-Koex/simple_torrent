@@ -4,8 +4,9 @@ project(torrent_plugin LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 # ───── 1. Header search paths ───────────────────────────────────────────
-set(LIBTORRENT_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libtorrent)
-set(BOOST_ROOT      ${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost)
+set(SHARED_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../shared)
+set(LIBTORRENT_ROOT ${SHARED_ROOT}/third_party/libtorrent)
+set(BOOST_ROOT ${SHARED_ROOT}/third_party/boost)
 
 # ───── 2. Import the **shared** libtorrent (.so) built by b2 ────────────
 #        (copy or symlink it into jniLibs/<abi>/ as libtorrent-rasterbar.so)
@@ -17,10 +18,10 @@ set_target_properties(libtorrent PROPERTIES
         ${LIBTORRENT_ROOT}/include
 )
 
-# ───── 3. Your plugin’s native code ─────────────────────────────────────
+# ───── 3. Your plugin's native code ─────────────────────────────────────
 set(PLUGIN_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/torrent_core.cpp      # JNI layer (tiny)
-    ${CMAKE_CURRENT_SOURCE_DIR}/torrent_plugin.cpp                   # platform-neutral libtorrent logic
+    ${SHARED_ROOT}/torrent_core/torrent_core.cpp     # shared core implementation
+    ${CMAKE_CURRENT_SOURCE_DIR}/torrent_plugin.cpp    # Android-specific JNI adapter
 )
 add_library(torrent_plugin SHARED ${PLUGIN_SRC})
 
@@ -28,6 +29,7 @@ target_include_directories(torrent_plugin
     PRIVATE
         ${LIBTORRENT_ROOT}/include
         ${BOOST_ROOT}
+        ${SHARED_ROOT}/torrent_core
 )
 
 # ───── 4. Android system libraries (conditionally) ──────────────────────
@@ -38,7 +40,7 @@ find_library(cpp_lib  c++_shared)
 find_library(atomic_lib atomic)   # may be NOTFOUND on 64‑bit
 
 # ───── 5. Final link line ───────────────────────────────────────────────
-#     No separate try_signal/boost_system needed – they’re inside the .so.
+#     No separate try_signal/boost_system needed – they're inside the .so.
 target_link_libraries(torrent_plugin
     PRIVATE
         libtorrent

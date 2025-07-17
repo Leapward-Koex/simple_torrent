@@ -16,10 +16,16 @@ cmake_policy(VERSION 3.14...3.25)
 # not be changed
 set(PLUGIN_NAME "simple_torrent_plugin")
 
+# Shared torrent core
+set(SHARED_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../shared")
+set(LIBTORRENT_ROOT "${SHARED_ROOT}/third_party/libtorrent")
+set(BOOST_ROOT "${SHARED_ROOT}/third_party/boost")
+
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
   "simple_torrent_plugin.cpp"
   "simple_torrent_plugin.h"
+  "${SHARED_ROOT}/torrent_core/torrent_core.cpp"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -46,7 +52,17 @@ target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 # dependencies here.
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
+
+target_include_directories(${PLUGIN_NAME} PRIVATE
+  "${SHARED_ROOT}/torrent_core"
+  "${LIBTORRENT_ROOT}/include"
+  "${BOOST_ROOT}")
+
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
+
+# Link against libtorrent (you'll need to provide the appropriate library files)
+# target_link_libraries(${PLUGIN_NAME} PRIVATE 
+#   "${SHARED_ROOT}/lib/windows/torrent-rasterbar.lib")
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
