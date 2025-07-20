@@ -5,7 +5,7 @@ A high-performance Flutter plugin for torrent downloading and management, built 
 ## Features
 
 - ✅ **High Performance**: Built with libtorrent-rasterbar for optimal performance
-- ✅ **Cross-Platform**: Supports Android (iOS coming soon)
+- ✅ **Cross-Platform**: Supports Android and iOS
 - ✅ **Real-time Updates**: Stream-based progress monitoring and metadata updates
 - ✅ **Thread-Safe**: Non-blocking operations prevent ANR issues
 - ✅ **Comprehensive API**: Full torrent lifecycle management
