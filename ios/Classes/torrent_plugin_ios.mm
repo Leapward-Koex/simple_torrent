@@ -5,7 +5,7 @@
 #include <mutex>
 
 // Include the implementation directly
-#include "../../shared/torrent_core/torrent_core_impl.mm"
+#include "../../shared/torrent_core/torrent_core.cpp"
 
 // Internal implementation
 struct TorrentManager {
