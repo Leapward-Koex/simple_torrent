@@ -1,7 +1,11 @@
 #include "torrent_plugin_ios.hpp"
+#include "../../shared/torrent_core/torrent_core.hpp"
 #include <string>
 #include <unordered_map>
 #include <mutex>
+
+// Include the implementation directly
+#include "../../shared/torrent_core/torrent_core.cpp"
 
 // Internal implementation
 struct TorrentManager {
@@ -9,7 +13,10 @@ struct TorrentManager {
     std::unordered_map<int, std::pair<StatsCallback, MetadataCallback>> callbacks;
     std::mutex callbackMutex;
     
-    TorrentManager() : manager(std::make_unique<tc::Manager>()) {}
+    TorrentManager() {
+        tc::ManagerConfig config;  // Use default config
+        manager = std::make_unique<tc::Manager>(config);
+    }
 };
 
 // Thread-safe callback handling
@@ -154,6 +161,52 @@ const char* torrent_manager_get_last_error(TorrentManager* manager, int id) {
     
     static std::string errorStr = manager->manager->getLastError(id);
     return errorStr.c_str();
+}
+
+CTorrentInfo* torrent_manager_get_info(TorrentManager* manager, int id) {
+    if (!manager) return nullptr;
+    
+    tc::TorrentInfo info = manager->manager->getTorrentInfo(id);
+    
+    CTorrentInfo* cInfo = new CTorrentInfo();
+    cInfo->id = info.id;
+    
+    // Allocate and copy strings - these will need to be freed
+    cInfo->magnetUri = strdup(info.magnetUri.c_str());
+    cInfo->savePath = strdup(info.savePath.c_str());
+    cInfo->displayName = strdup(info.displayName.c_str());
+    cInfo->lastError = strdup(info.lastError.c_str());
+    
+    // Convert state to string
+    std::string stateStr;
+    switch (info.state) {
+        case tc::TorrentState::Starting: stateStr = "starting"; break;
+        case tc::TorrentState::DownloadingMetadata: stateStr = "downloading_metadata"; break;
+        case tc::TorrentState::Downloading: stateStr = "downloading"; break;
+        case tc::TorrentState::Seeding: stateStr = "seeding"; break;
+        case tc::TorrentState::Paused: stateStr = "paused"; break;
+        case tc::TorrentState::Error: stateStr = "error"; break;
+        case tc::TorrentState::Stopped: stateStr = "stopped"; break;
+        default: stateStr = "unknown"; break;
+    }
+    cInfo->state = strdup(stateStr.c_str());
+    
+    // Convert time_point to unix timestamp
+    auto duration = info.createdAt.time_since_epoch();
+    cInfo->createdAt = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+    
+    return cInfo;
+}
+
+void torrent_manager_free_torrent_info(CTorrentInfo* info) {
+    if (!info) return;
+    
+    free(const_cast<char*>(info->magnetUri));
+    free(const_cast<char*>(info->savePath));
+    free(const_cast<char*>(info->displayName));
+    free(const_cast<char*>(info->state));
+    free(const_cast<char*>(info->lastError));
+    delete info;
 }
 
 void torrent_manager_free_string(const char* str) {
