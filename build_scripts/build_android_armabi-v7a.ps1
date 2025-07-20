@@ -1,6 +1,6 @@
 <#
-Build Boost (static, PIC) and libtorrent (static) for Android armeabi-v7a.
-Outputs go to ./toolchains relative to this script.
+Build Boost (static, PIC) and libtorrent (shared) for Android armeabi-v7a.
+Outputs go to the appropriate shared and Android jniLibs directories.
 #>
 
 param()
@@ -8,11 +8,22 @@ param()
 # ── config ──────────────────────────────────────────────────────────
 $Here       = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ToolsDir   = Join-Path $Here 'toolchains'
+$SharedDir  = Join-Path $Here '..\shared'
+$AndroidDir = Join-Path $Here '..\android'
 
+# Architecture-specific settings
+$ABI        = 'armeabi-v7a'
 $BoostSrc   = 'C:\Dev\boost_1_88_0'
-$BoostOut   = Join-Path $ToolsDir 'boost-android-armeabi-v7a'
-$LibtPrefix = Join-Path $ToolsDir 'libtorrent-armeabi-v7a'
 $LibtSrc    = 'C:\Dev\libtorrent'
+
+# Output directories (matching expected structure)
+$BoostOut      = Join-Path $SharedDir 'third_party\boost'
+$LibtIncludeOut = Join-Path $SharedDir 'third_party\libtorrent\include'
+$JniLibsOut    = Join-Path $AndroidDir "src\main\jniLibs\$ABI"
+
+# Build directories (temporary)
+$BoostBuildOut = Join-Path $ToolsDir "boost-android-$ABI"
+$LibtPrefix    = Join-Path $ToolsDir "libtorrent-$ABI"
 
 $NDK        = $Env:ANDROID_NDK -replace '"',''
 if (-not $NDK) { throw 'ANDROID_NDK is not set' }
@@ -25,6 +36,9 @@ $B2         = Join-Path $BoostSrc 'b2.exe'
 
 # ensure toolchains folder exists
 $null = New-Item -Force -ItemType Directory -Path $ToolsDir
+$null = New-Item -Force -ItemType Directory -Path $BoostOut
+$null = New-Item -Force -ItemType Directory -Path $LibtIncludeOut  
+$null = New-Item -Force -ItemType Directory -Path $JniLibsOut
 
 # ── 1. temporary user-config.jam ────────────────────────────────────
 # convert back-slashes to forward-slashes for jam
@@ -46,7 +60,7 @@ $Env:BOOST_BUILD_USER_CONFIG = $Jam
 
 try {
     # ── 2. build Boost (only once) ──────────────────────────────────
-    if (-not (Test-Path (Join-Path $BoostOut 'include\boost\config.hpp'))) {
+    if (-not (Test-Path (Join-Path $BoostBuildOut 'include\boost\config.hpp'))) {
 
         if (-not (Test-Path $B2)) { & "$BoostSrc\bootstrap.bat" }
 
@@ -57,9 +71,15 @@ try {
               target-os=android architecture=arm address-model=32 `
               cxxstd=17 link=static runtime-link=static threading=multi `
               --with-system --with-atomic `
-              --hash install "--prefix=$BoostOut"
+              --hash install "--prefix=$BoostBuildOut"
         if ($LASTEXITCODE) { throw 'Boost build failed' }
         Pop-Location
+    }
+
+    # Copy Boost headers to shared location (only once for all Android ABIs)
+    if (-not (Test-Path (Join-Path $BoostOut 'boost\config.hpp'))) {
+        Write-Host "Copying Boost headers to shared location..."
+        Copy-Item -Recurse -Force (Join-Path $BoostBuildOut 'include\*') $BoostOut
     }
 
     # ── 3. clone libtorrent if needed ───────────────────────────────
@@ -68,7 +88,7 @@ try {
         if ($LASTEXITCODE) { throw 'git clone failed' }
     }
 
-    # ── 4. build libtorrent (static) ────────────────────────────────
+    # ── 4. build libtorrent (shared) ────────────────────────────────
     Push-Location $LibtSrc
     & $B2 "-j$Jobs" `
           toolset=clang-android `
@@ -80,6 +100,21 @@ try {
     if ($LASTEXITCODE) { throw 'libtorrent build failed' }
     Pop-Location
 
+    # Copy libtorrent shared library to jniLibs
+    $LibtSharedLib = Join-Path $LibtPrefix 'lib\libtorrent-rasterbar.so.2.0.11'
+    if (Test-Path $LibtSharedLib) {
+        Write-Host "Copying libtorrent shared library to jniLibs..."
+        Copy-Item $LibtSharedLib $JniLibsOut
+    } else {
+        throw "libtorrent shared library not found at $LibtSharedLib"
+    }
+
+    # Copy libtorrent headers to shared location (only once for all Android ABIs) 
+    if (-not (Test-Path (Join-Path $LibtIncludeOut 'libtorrent\session.hpp'))) {
+        Write-Host "Copying libtorrent headers to shared location..."
+        Copy-Item -Recurse -Force (Join-Path $LibtPrefix 'include\*') $LibtIncludeOut
+    }
+
 }
 finally {
     # clean up
@@ -87,6 +122,7 @@ finally {
     Set-Location $Here
 }
 
-Write-Host "`nBuild complete."
-Write-Host "Boost → $BoostOut"
-Write-Host "libtorrent → $LibtPrefix"
+Write-Host "`nBuild complete for Android $ABI."
+Write-Host "Boost headers → $BoostOut"
+Write-Host "libtorrent headers → $LibtIncludeOut"
+Write-Host "libtorrent shared lib → $JniLibsOut"
