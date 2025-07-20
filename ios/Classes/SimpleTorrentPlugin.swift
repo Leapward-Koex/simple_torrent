@@ -35,6 +35,23 @@ func torrent_manager_get_state(_ manager: UnsafeMutableRawPointer, _ id: Int32) 
 @_silgen_name("torrent_manager_get_last_error")
 func torrent_manager_get_last_error(_ manager: UnsafeMutableRawPointer, _ id: Int32) -> UnsafePointer<CChar>?
 
+@_silgen_name("torrent_manager_get_info")
+func torrent_manager_get_info(_ manager: UnsafeMutableRawPointer, _ id: Int32) -> UnsafeMutablePointer<CTorrentInfo>?
+
+@_silgen_name("torrent_manager_free_torrent_info")
+func torrent_manager_free_torrent_info(_ info: UnsafeMutablePointer<CTorrentInfo>)
+
+// C struct wrapper for TorrentInfo
+struct CTorrentInfo {
+    var id: Int32
+    var magnetUri: UnsafePointer<CChar>?
+    var savePath: UnsafePointer<CChar>?
+    var displayName: UnsafePointer<CChar>?
+    var state: UnsafePointer<CChar>?
+    var lastError: UnsafePointer<CChar>?
+    var createdAt: Int64
+}
+
 @_silgen_name("torrent_manager_free_int_array")
 func torrent_manager_free_int_array(_ array: UnsafeMutablePointer<Int32>)
 
@@ -42,8 +59,9 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
     private var torrentManager: UnsafeMutableRawPointer?
     private var progressChannel: FlutterEventChannel?
     private var metadataChannel: FlutterEventChannel?
-    private var progressSink: FlutterEventSink?
-    private var metadataSink: FlutterEventSink?
+    // Make these internal so the stream handlers can access them
+    internal var progressSink: FlutterEventSink?
+    internal var metadataSink: FlutterEventSink?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let methodChannel = FlutterMethodChannel(name: "simple_torrent/methods", binaryMessenger: registrar.messenger())
@@ -53,6 +71,9 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         let instance = SimpleTorrentPlugin()
         instance.progressChannel = progressChannel
         instance.metadataChannel = metadataChannel
+        
+        // Set the shared instance here since awakeFromNib won't be called for Flutter plugins
+        SimpleTorrentPlugin.sharedInstance = instance
         
         registrar.addMethodCallDelegate(instance, channel: methodChannel)
         
@@ -94,6 +115,8 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
             handleExists(call: call, result: result, manager: manager)
         case "getState":
             handleGetState(call: call, result: result, manager: manager)
+        case "getTorrentInfo":
+            handleGetTorrentInfo(call: call, result: result, manager: manager)
         case "getLastError":
             handleGetLastError(call: call, result: result, manager: manager)
         default:
@@ -233,6 +256,33 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         }
     }
     
+    private func handleGetTorrentInfo(call: FlutterMethodCall, result: @escaping FlutterResult, manager: UnsafeMutableRawPointer) {
+        guard let args = call.arguments as? [String: Any],
+              let id = args["id"] as? Int else {
+            result(FlutterError(code: "INVALID_ARGS", message: "id is required", details: nil))
+            return
+        }
+        
+        if let infoPtr = torrent_manager_get_info(manager, Int32(id)) {
+            let info = infoPtr.pointee
+            
+            let torrentInfo: [String: Any] = [
+                "id": Int(info.id),
+                "magnetUri": info.magnetUri != nil ? String(cString: info.magnetUri!) : "",
+                "savePath": info.savePath != nil ? String(cString: info.savePath!) : "",
+                "displayName": info.displayName != nil ? String(cString: info.displayName!) : "",
+                "state": info.state != nil ? String(cString: info.state!) : "unknown",
+                "lastError": info.lastError != nil ? String(cString: info.lastError!) : "",
+                "createdAt": Int(info.createdAt)
+            ]
+            
+            torrent_manager_free_torrent_info(infoPtr)
+            result(torrentInfo)
+        } else {
+            result(FlutterError(code: "NOT_FOUND", message: "Torrent not found", details: nil))
+        }
+    }
+    
     private func handleGetLastError(call: FlutterMethodCall, result: @escaping FlutterResult, manager: UnsafeMutableRawPointer) {
         guard let args = call.arguments as? [String: Any],
               let id = args["id"] as? Int else {
@@ -283,11 +333,6 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
     }
     
     static var sharedInstance: SimpleTorrentPlugin?
-    
-    override func awakeFromNib() {
-        super.awakeFromNib()
-        SimpleTorrentPlugin.sharedInstance = self
-    }
 }
 
 class ProgressStreamHandler: NSObject, FlutterStreamHandler {
