@@ -1,0 +1,2 @@
+shared/lib/windows/lib/*.lib filter=lfs diff=lfs merge=lfs -text
+shared/lib/windows/lib/Debug/*.lib filter=lfs diff=lfs merge=lfs -text
