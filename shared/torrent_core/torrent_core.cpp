@@ -3,6 +3,7 @@
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/settings_pack.hpp>
+#include <libtorrent/torrent_flags.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -275,7 +276,7 @@ namespace tc
             TorrentState newState = stateFromLibtorrentState(st.state);
 
             // Respect manual pause state - don't override if manually paused
-            if (entry.manuallyPaused || st.paused)
+            if (entry.manuallyPaused || (entry.torrentHandle.flags() & libtorrent::torrent_flags::paused))
             {
                 newState = TorrentState::Paused;
             }

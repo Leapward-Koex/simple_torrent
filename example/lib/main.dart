@@ -31,7 +31,7 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
   final _nameController = TextEditingController();
 
   List<TorrentInfo> _torrents = [];
-  Map<int, TorrentStats> _stats = {};
+  final Map<int, TorrentStats> _stats = {};
   bool _initialized = false;
 
   @override
