@@ -1,59 +1,8 @@
 import Flutter
 import UIKit
 
-// Bridge to the C++ torrent manager
-@_silgen_name("torrent_manager_create")
-func torrent_manager_create() -> UnsafeMutableRawPointer?
-
-@_silgen_name("torrent_manager_destroy")
-func torrent_manager_destroy(_ manager: UnsafeMutableRawPointer)
-
-@_silgen_name("torrent_manager_apply_config")
-func torrent_manager_apply_config(_ manager: UnsafeMutableRawPointer, _ maxTorrents: Int32, _ maxDownloadRate: Int32, _ maxUploadRate: Int32, _ enableDHT: Bool, _ userAgent: UnsafePointer<CChar>?)
-
-@_silgen_name("torrent_manager_start")
-func torrent_manager_start(_ manager: UnsafeMutableRawPointer, _ magnet: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
-
-@_silgen_name("torrent_manager_pause")
-func torrent_manager_pause(_ manager: UnsafeMutableRawPointer, _ id: Int32)
-
-@_silgen_name("torrent_manager_resume")
-func torrent_manager_resume(_ manager: UnsafeMutableRawPointer, _ id: Int32)
-
-@_silgen_name("torrent_manager_cancel")
-func torrent_manager_cancel(_ manager: UnsafeMutableRawPointer, _ id: Int32)
-
-@_silgen_name("torrent_manager_get_active_ids")
-func torrent_manager_get_active_ids(_ manager: UnsafeMutableRawPointer, _ count: UnsafeMutablePointer<Int32>) -> UnsafeMutablePointer<Int32>?
-
-@_silgen_name("torrent_manager_exists")
-func torrent_manager_exists(_ manager: UnsafeMutableRawPointer, _ id: Int32) -> Bool
-
-@_silgen_name("torrent_manager_get_state")
-func torrent_manager_get_state(_ manager: UnsafeMutableRawPointer, _ id: Int32) -> UnsafePointer<CChar>?
-
-@_silgen_name("torrent_manager_get_last_error")
-func torrent_manager_get_last_error(_ manager: UnsafeMutableRawPointer, _ id: Int32) -> UnsafePointer<CChar>?
-
-@_silgen_name("torrent_manager_get_info")
-func torrent_manager_get_info(_ manager: UnsafeMutableRawPointer, _ id: Int32) -> UnsafeMutablePointer<CTorrentInfo>?
-
-@_silgen_name("torrent_manager_free_torrent_info")
-func torrent_manager_free_torrent_info(_ info: UnsafeMutablePointer<CTorrentInfo>)
-
-// C struct wrapper for TorrentInfo
-struct CTorrentInfo {
-    var id: Int32
-    var magnetUri: UnsafePointer<CChar>?
-    var savePath: UnsafePointer<CChar>?
-    var displayName: UnsafePointer<CChar>?
-    var state: UnsafePointer<CChar>?
-    var lastError: UnsafePointer<CChar>?
-    var createdAt: Int64
-}
-
-@_silgen_name("torrent_manager_free_int_array")
-func torrent_manager_free_int_array(_ array: UnsafeMutablePointer<Int32>)
+// The C interface is made available via the bridging header. No need for
+// `_silgen_name` declarations here.
 
 public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
     private var torrentManager: UnsafeMutableRawPointer?
@@ -250,6 +199,7 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         
         if let statePtr = torrent_manager_get_state(manager, Int32(id)) {
             let state = String(cString: statePtr)
+            torrent_manager_free_string(statePtr)
             result(state)
         } else {
             result("unknown")
@@ -292,6 +242,7 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         
         if let errorPtr = torrent_manager_get_last_error(manager, Int32(id)) {
             let error = String(cString: errorPtr)
+            torrent_manager_free_string(errorPtr)
             result(error)
         } else {
             result("")

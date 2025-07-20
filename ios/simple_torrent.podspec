@@ -19,8 +19,8 @@ A new Flutter plugin project.
   s.library = 'c++'
 
   # Flutter.framework does not contain a i386 slice.
-  s.pod_target_xcconfig = { 
-    'DEFINES_MODULE' => 'YES', 
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     'CLANG_CXX_LIBRARY' => 'libc++',
@@ -32,14 +32,15 @@ A new Flutter plugin project.
     'OTHER_LDFLAGS' => [
       '-ltorrent-rasterbar',
       '-lboost_system',
-      '-lboost_atomic', 
+      '-lboost_atomic',
       '-lboost_thread',
       '-lboost_chrono',
       '-lboost_regex',
       '-lboost_filesystem',
       '-lboost_date_time',
       '-framework', 'SystemConfiguration'
-    ].join(' ')
+    ].join(' '),
+    'SWIFT_OBJC_BRIDGING_HEADER' => '$(PODS_TARGET_SRCROOT)/Classes/simple_torrent-Bridging-Header.h'
   }
   s.swift_version = '5.0'
 

@@ -138,10 +138,10 @@ bool torrent_manager_exists(TorrentManager* manager, int id) {
 
 const char* torrent_manager_get_state(TorrentManager* manager, int id) {
     if (!manager) return nullptr;
-    
+
     tc::TorrentState state = manager->manager->getState(id);
-    static std::string stateStr;
-    
+    std::string stateStr;
+
     switch (state) {
         case tc::TorrentState::Starting: stateStr = "starting"; break;
         case tc::TorrentState::DownloadingMetadata: stateStr = "downloading_metadata"; break;
@@ -152,15 +152,15 @@ const char* torrent_manager_get_state(TorrentManager* manager, int id) {
         case tc::TorrentState::Stopped: stateStr = "stopped"; break;
         default: stateStr = "unknown"; break;
     }
-    
-    return stateStr.c_str();
+
+    return strdup(stateStr.c_str());
 }
 
 const char* torrent_manager_get_last_error(TorrentManager* manager, int id) {
     if (!manager) return nullptr;
-    
-    static std::string errorStr = manager->manager->getLastError(id);
-    return errorStr.c_str();
+
+    std::string errorStr = manager->manager->getLastError(id);
+    return strdup(errorStr.c_str());
 }
 
 CTorrentInfo* torrent_manager_get_info(TorrentManager* manager, int id) {
@@ -191,9 +191,9 @@ CTorrentInfo* torrent_manager_get_info(TorrentManager* manager, int id) {
     }
     cInfo->state = strdup(stateStr.c_str());
     
-    // Convert time_point to unix timestamp
+    // Convert time_point to Unix timestamp in milliseconds
     auto duration = info.createdAt.time_since_epoch();
-    cInfo->createdAt = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+    cInfo->createdAt = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
     
     return cInfo;
 }
@@ -210,8 +210,7 @@ void torrent_manager_free_torrent_info(CTorrentInfo* info) {
 }
 
 void torrent_manager_free_string(const char* str) {
-    // In this implementation, strings are managed by static storage
-    // No need to free anything
+    free(const_cast<char*>(str));
 }
 
 void torrent_manager_free_int_array(int* array) {
