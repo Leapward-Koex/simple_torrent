@@ -1,5 +1,5 @@
 #pragma once
-#include "../../shared/torrent_core/torrent_core.hpp"
+#include "torrent_core/torrent_core.hpp"
 #include <functional>
 #include <memory>
 
@@ -37,6 +37,20 @@ extern "C"
     bool torrent_manager_exists(TorrentManager *manager, int id);
     const char *torrent_manager_get_state(TorrentManager *manager, int id);
     const char *torrent_manager_get_last_error(TorrentManager *manager, int id);
+    
+    // TorrentInfo structure for C interface
+    typedef struct {
+        int id;
+        const char* magnetUri;
+        const char* savePath;
+        const char* displayName;
+        const char* state;
+        const char* lastError;
+        long long createdAt;
+    } CTorrentInfo;
+    
+    CTorrentInfo* torrent_manager_get_info(TorrentManager *manager, int id);
+    void torrent_manager_free_torrent_info(CTorrentInfo* info);
 
     // Memory management for returned strings
     void torrent_manager_free_string(const char *str);
