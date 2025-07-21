@@ -175,7 +175,7 @@ set(simple_torrent_bundled_libraries
 
 # Temporarily disable tests to focus on main plugin functionality
 # TODO: Fix test compilation issues
-if (FALSE AND ${include_${PROJECT_NAME}_tests})
+if (FALSE)  # Tests disabled
 set(TEST_RUNNER "${PROJECT_NAME}_test")
 enable_testing()
 
