@@ -80,6 +80,9 @@ class SimpleTorrentPlugin : FlutterPlugin,
     private external fun cancelTorrent(id: Int)
 
     @Keep
+    private external fun finaliseTorrent(id: Int)
+
+    @Keep
     private external fun getActiveTorrentIds(): IntArray
 
     @Keep
@@ -334,6 +337,25 @@ class SimpleTorrentPlugin : FlutterPlugin,
                         result.success(null)
                     } catch (e: Exception) {
                         result.error("ERROR", "Failed to cancel torrent: ${e.message}", null)
+                    }
+                }
+            }
+
+            "finalise" -> {
+                val id = call.argument<Int>("id")
+                if (id == null) {
+                    result.error("INVALID_ARGS", "id is required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            finaliseTorrent(id)
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to finalise torrent: ${e.message}", null)
                     }
                 }
             }

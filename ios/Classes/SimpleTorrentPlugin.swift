@@ -23,6 +23,9 @@ func torrent_manager_resume(_ manager: UnsafeMutableRawPointer, _ id: Int32)
 @_silgen_name("torrent_manager_cancel")
 func torrent_manager_cancel(_ manager: UnsafeMutableRawPointer, _ id: Int32)
 
+@_silgen_name("torrent_manager_finalise")
+func torrent_manager_finalise(_ manager: UnsafeMutableRawPointer, _ id: Int32)
+
 @_silgen_name("torrent_manager_get_active_ids")
 func torrent_manager_get_active_ids(_ manager: UnsafeMutableRawPointer, _ count: UnsafeMutablePointer<Int32>) -> UnsafeMutablePointer<Int32>?
 
@@ -109,6 +112,8 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
             handleResume(call: call, result: result, manager: manager)
         case "cancel":
             handleCancel(call: call, result: result, manager: manager)
+        case "finalise":
+            handleFinalise(call: call, result: result, manager: manager)
         case "getActiveTorrentIds":
             handleGetActiveTorrentIds(result: result, manager: manager)
         case "exists":
@@ -216,6 +221,17 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         }
         
         torrent_manager_cancel(manager, Int32(id))
+        result(nil)
+    }
+    
+    private func handleFinalise(call: FlutterMethodCall, result: @escaping FlutterResult, manager: UnsafeMutableRawPointer) {
+        guard let args = call.arguments as? [String: Any],
+              let id = args["id"] as? Int else {
+            result(FlutterError(code: "INVALID_ARGS", message: "id is required", details: nil))
+            return
+        }
+        
+        torrent_manager_finalise(manager, Int32(id))
         result(nil)
     }
     

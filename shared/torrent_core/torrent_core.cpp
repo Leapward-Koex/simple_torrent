@@ -319,12 +319,6 @@ namespace tc
                     entry.statsCallback(stats);
                 }
             }
-
-            // Check if finished
-            if (st.is_seeding || st.is_finished)
-            {
-                finalise(id);
-            }
         }
         catch (const std::exception &e)
         {

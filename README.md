@@ -85,7 +85,8 @@ final id = await SimpleTorrent.start(
 // Control torrents
 await SimpleTorrent.pause(id);
 await SimpleTorrent.resume(id);
-await SimpleTorrent.cancel(id);
+await SimpleTorrent.cancel(id);  // Cancels torrent and deletes files
+await SimpleTorrent.finalise(id);  // Removes torrent but keeps files
 
 // Get torrent information
 final info = await SimpleTorrent.getTorrentInfo(id);
@@ -158,7 +159,8 @@ final torrent = await SimpleTorrent.getTorrentInfo(id);
 
 await torrent.pause();           // Pause this torrent
 await torrent.resume();          // Resume this torrent  
-await torrent.cancel();          // Cancel this torrent
+await torrent.cancel();          // Cancel this torrent (deletes files)
+await torrent.finalise();          // Finish this torrent (keeps files)
 final state = await torrent.getCurrentState(); // Get current state
 final stream = torrent.statsStream;            // Get stats stream
 ```

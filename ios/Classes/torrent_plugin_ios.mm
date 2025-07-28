@@ -119,6 +119,14 @@ void torrent_manager_cancel(TorrentManager* manager, int id) {
     }
 }
 
+void torrent_manager_finalise(TorrentManager* manager, int id) {
+    if (manager) {
+        manager->manager->finalise(id);
+        std::lock_guard<std::mutex> lock(manager->callbackMutex);
+        manager->callbacks.erase(id);
+    }
+}
+
 int* torrent_manager_get_active_ids(TorrentManager* manager, int* count) {
     if (!manager || !count) return nullptr;
     
