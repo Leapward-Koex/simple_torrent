@@ -307,6 +307,30 @@ void SimpleTorrentPlugin::HandleMethodCall(
     callbacks_.erase(*id);
     result->Success(flutter::EncodableValue());
   }
+  else if (method_name == "finalise") {
+    const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGS", "Arguments must be a map");
+      return;
+    }
+    
+    auto id_it = arguments->find(flutter::EncodableValue("id"));
+    if (id_it == arguments->end()) {
+      result->Error("INVALID_ARGS", "id is required");
+      return;
+    }
+    
+    const auto* id = std::get_if<int>(&id_it->second);
+    if (!id) {
+      result->Error("INVALID_ARGS", "id must be an integer");
+      return;
+    }
+    
+    manager_->finalise(*id);
+    std::lock_guard<std::mutex> lock(callbacks_mutex_);
+    callbacks_.erase(*id);
+    result->Success(flutter::EncodableValue());
+  }
   else if (method_name == "getActiveTorrentIds") {
     auto ids = manager_->getActiveTorrentIds();
     flutter::EncodableList result_list;

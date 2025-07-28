@@ -21,6 +21,7 @@ class SimpleTorrent {
   static Future<void> pause(int id) => _p.pause(id);
   static Future<void> resume(int id) => _p.resume(id);
   static Future<void> cancel(int id) => _p.cancel(id);
+  static Future<void> finalise(int id) => _p.finalise(id);
 
   // New management API
   static Future<List<int>> getActiveTorrentIds() => _p.getActiveTorrentIds();
@@ -46,6 +47,9 @@ extension TorrentInfoExtensions on TorrentInfo {
 
   /// Cancel this torrent
   Future<void> cancel() => SimpleTorrent.cancel(id);
+
+  /// Finish this torrent (remove from session but keep files)
+  Future<void> finalise() => SimpleTorrent.finalise(id);
 
   /// Get a stats stream for this torrent
   Stream<TorrentStats> get statsStream => SimpleTorrent.statsFor(id);

@@ -214,6 +214,12 @@ Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_cancel
     g_mgr->cancel(id);
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_finaliseTorrent(JNIEnv *, jobject, jint id)
+{
+    g_mgr->finalise(id);
+}
+
 extern "C" JNIEXPORT jintArray JNICALL
 Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_getActiveTorrentIds(JNIEnv *e, jobject)
 {

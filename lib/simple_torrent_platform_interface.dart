@@ -121,6 +121,19 @@ class TorrentInfo {
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
     );
   }
+
+  /// Convert torrent info to a map for serialization
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'magnetUri': magnetUri,
+      'savePath': savePath,
+      'displayName': displayName,
+      'state': state.name,
+      'lastError': lastError,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+    };
+  }
 }
 
 /// Cross-platform contract.
@@ -142,6 +155,7 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
   Future<void> pause(int id);
   Future<void> resume(int id);
   Future<void> cancel(int id);
+  Future<void> finalise(int id);
 
   // New management API
   Future<List<int>> getActiveTorrentIds();
@@ -205,6 +219,22 @@ class TorrentStats {
     phase: m['phase'] as String,
     state: m['state'] != null ? TorrentStateExtension.fromString(m['state'] as String) : null,
   );
+
+  /// Convert stats to a map for serialization
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'download_rate': downloadRate,
+      'upload_rate': uploadRate,
+      'pieces': pieces,
+      'pieces_total': piecesTotal,
+      'progress': progress,
+      'seeds': seeds,
+      'peers': peers,
+      'phase': phase,
+      'state': state?.name,
+    };
+  }
 }
 
 class TorrentMetadata {
@@ -241,4 +271,19 @@ class TorrentMetadata {
     isPrivate: m['private'] as bool,
     isV2: m['v2'] as bool,
   );
+
+  /// Convert metadata to a map for serialization
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'total_bytes': totalBytes,
+      'piece_size': pieceSize,
+      'piece_count': pieceCount,
+      'file_count': fileCount,
+      'creation_date': creationDate,
+      'private': isPrivate,
+      'v2': isV2,
+    };
+  }
 }

@@ -31,6 +31,7 @@ extern "C"
     void torrent_manager_pause(TorrentManager *manager, int id);
     void torrent_manager_resume(TorrentManager *manager, int id);
     void torrent_manager_cancel(TorrentManager *manager, int id);
+    void torrent_manager_finalise(TorrentManager *manager, int id);
 
     // Query operations
     int *torrent_manager_get_active_ids(TorrentManager *manager, int *count);
