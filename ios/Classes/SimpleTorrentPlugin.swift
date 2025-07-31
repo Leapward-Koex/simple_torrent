@@ -156,10 +156,10 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         
         let displayName = args["displayName"] as? String
         
-        let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progressPct, seeds, peers, phase, state in
+        let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, phase, state in
             DispatchQueue.main.async {
                 if let instance = SimpleTorrentPlugin.sharedInstance {
-                    instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progressPct: Int(progressPct), seeds: Int(seeds), peers: Int(peers), phase: String(cString: phase), state: String(cString: state))
+                    instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), phase: String(cString: phase), state: String(cString: state))
                 }
             }
         }
@@ -232,6 +232,10 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         }
         
         torrent_manager_finalise(manager, Int32(id))
+        
+        // Send final completion stats message
+        sendStats(id: id, dlRate: 0, ulRate: 0, pieces: 0, piecesTotal: 0, progress: 1.0, seeds: 0, peers: 0, phase: "completed", state: "completed")
+        
         result(nil)
     }
     
@@ -315,7 +319,7 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
     }
     
     // Event channel handlers
-    private func sendStats(id: Int, dlRate: Int, ulRate: Int, pieces: Int, piecesTotal: Int, progressPct: Int, seeds: Int, peers: Int, phase: String, state: String) {
+    private func sendStats(id: Int, dlRate: Int, ulRate: Int, pieces: Int, piecesTotal: Int, progress: Float, seeds: Int, peers: Int, phase: String, state: String) {
         let stats: [String: Any] = [
             "eventType": "stats",
             "id": id,
@@ -323,7 +327,7 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
             "upload_rate": ulRate,
             "pieces": pieces,
             "pieces_total": piecesTotal,
-            "progress": progressPct,
+            "progress": progress,
             "seeds": seeds,
             "peers": peers,
             "phase": phase,

@@ -307,7 +307,7 @@ namespace tc
                 stats.ulRate = st.upload_payload_rate;
                 stats.pieces = st.num_pieces;
                 stats.piecesTotal = entry.torrentHandle.torrent_file() ? entry.torrentHandle.torrent_file()->num_pieces() : 0;
-                stats.progressPct = static_cast<int>(st.progress * 100.f);
+                stats.progress = st.progress;
                 stats.seeds = st.num_seeds;
                 stats.peers = st.num_peers;
                 stats.phase = phaseFromState(st.state);

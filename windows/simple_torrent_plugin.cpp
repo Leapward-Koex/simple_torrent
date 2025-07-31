@@ -105,7 +105,7 @@ void SimpleTorrentPlugin::SendStatsEvent(const tc::Stats& stats) {
     stats_map[flutter::EncodableValue("upload_rate")] = flutter::EncodableValue(stats.ulRate);
     stats_map[flutter::EncodableValue("pieces")] = flutter::EncodableValue(stats.pieces);
     stats_map[flutter::EncodableValue("pieces_total")] = flutter::EncodableValue(stats.piecesTotal);
-    stats_map[flutter::EncodableValue("progress")] = flutter::EncodableValue(stats.progressPct);
+    stats_map[flutter::EncodableValue("progress")] = flutter::EncodableValue(static_cast<double>(stats.progress));
     stats_map[flutter::EncodableValue("seeds")] = flutter::EncodableValue(stats.seeds);
     stats_map[flutter::EncodableValue("peers")] = flutter::EncodableValue(stats.peers);
     stats_map[flutter::EncodableValue("phase")] = flutter::EncodableValue(stats.phase);
@@ -327,6 +327,25 @@ void SimpleTorrentPlugin::HandleMethodCall(
     }
     
     manager_->finalise(*id);
+    
+    // Send final completion stats message
+    if (stats_event_sink_) {
+      flutter::EncodableMap completion_stats;
+      completion_stats[flutter::EncodableValue("eventType")] = flutter::EncodableValue("stats");
+      completion_stats[flutter::EncodableValue("id")] = flutter::EncodableValue(*id);
+      completion_stats[flutter::EncodableValue("download_rate")] = flutter::EncodableValue(0);
+      completion_stats[flutter::EncodableValue("upload_rate")] = flutter::EncodableValue(0);
+      completion_stats[flutter::EncodableValue("pieces")] = flutter::EncodableValue(0);
+      completion_stats[flutter::EncodableValue("pieces_total")] = flutter::EncodableValue(0);
+      completion_stats[flutter::EncodableValue("progress")] = flutter::EncodableValue(1.0);
+      completion_stats[flutter::EncodableValue("seeds")] = flutter::EncodableValue(0);
+      completion_stats[flutter::EncodableValue("peers")] = flutter::EncodableValue(0);
+      completion_stats[flutter::EncodableValue("phase")] = flutter::EncodableValue("completed");
+      completion_stats[flutter::EncodableValue("state")] = flutter::EncodableValue("completed");
+      
+      stats_event_sink_->Success(flutter::EncodableValue(completion_stats));
+    }
+    
     std::lock_guard<std::mutex> lock(callbacks_mutex_);
     callbacks_.erase(*id);
     result->Success(flutter::EncodableValue());
