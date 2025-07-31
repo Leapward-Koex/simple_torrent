@@ -11,7 +11,7 @@ extern "C"
 
     // Callback function pointers for iOS
     typedef void (*StatsCallback)(int id, int dlRate, int ulRate, int pieces, int piecesTotal,
-                                  int progressPct, int seeds, int peers, const char *phase, const char *state);
+                                  float progress, int seeds, int peers, const char *phase, const char *state);
     typedef void (*MetadataCallback)(int id, const char *name, long long totalBytes, int pieceSize,
                                      int pieceCount, int fileCount, long long creationDate,
                                      bool isPrivate, bool isV2);

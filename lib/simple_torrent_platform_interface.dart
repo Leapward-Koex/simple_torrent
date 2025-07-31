@@ -183,7 +183,7 @@ class TorrentStats {
   final int uploadRate; // bytes/s
   final int pieces;
   final int piecesTotal;
-  final int progress; // 0-100
+  final double progress; // 0.0-1.0
   final int seeds;
   final int peers;
   final String phase;
@@ -205,7 +205,8 @@ class TorrentStats {
   // Convenience getters for backward compatibility
   int get dlRate => downloadRate;
   int get ulRate => uploadRate;
-  int get progressPct => progress;
+  @Deprecated('Use progress instead. This getter converts to percentage for backward compatibility.')
+  int get progressPct => (progress * 100).round();
 
   factory TorrentStats.fromMap(Map<dynamic, dynamic> m) => TorrentStats(
     id: m['id'] as int,
@@ -213,7 +214,7 @@ class TorrentStats {
     uploadRate: m['upload_rate'] as int,
     pieces: m['pieces'] as int,
     piecesTotal: m['pieces_total'] as int,
-    progress: m['progress'] as int,
+    progress: (m['progress'] as num).toDouble(),
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
     phase: m['phase'] as String,

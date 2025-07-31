@@ -353,6 +353,23 @@ class SimpleTorrentPlugin : FlutterPlugin,
                         withContext(Dispatchers.IO) {
                             finaliseTorrent(id)
                         }
+                        
+                        // Send final completion stats message
+                        val completionStats = mapOf(
+                            "eventType" to "stats",
+                            "id" to id,
+                            "download_rate" to 0,
+                            "upload_rate" to 0,
+                            "pieces" to 0,
+                            "pieces_total" to 0,
+                            "progress" to 1.0f,
+                            "seeds" to 0,
+                            "peers" to 0,
+                            "phase" to "completed",
+                            "state" to "completed"
+                        )
+                        sendStats(completionStats)
+                        
                         result.success(null)
                     } catch (e: Exception) {
                         result.error("ERROR", "Failed to finalise torrent: ${e.message}", null)

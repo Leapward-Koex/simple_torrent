@@ -38,7 +38,7 @@ static void handleStats(TorrentManager* tmgr, int id, const tc::Stats& stats) {
         }
         
         it->second.first(stats.id, stats.dlRate, stats.ulRate, stats.pieces, 
-                        stats.piecesTotal, stats.progressPct, stats.seeds, stats.peers,
+                        stats.piecesTotal, stats.progress, stats.seeds, stats.peers,
                         phase.c_str(), state.c_str());
     }
 }
