@@ -1,5 +1,6 @@
 // torrent_core.cpp  ────────────────────────────────────────────────
 #include "torrent_core.hpp"
+#include "torrent_state_helpers.hpp"
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/settings_pack.hpp>
@@ -110,9 +111,9 @@ namespace tc
         std::lock_guard lock(mtx_);
         if (auto it = map_.find(id); it != map_.end())
         {
-            it->second.torrentHandle.pause();
-            it->second.state = TorrentState::Paused;
-            it->second.manuallyPaused = true; // Track manual pause
+            // Unset auto_managed so the torrent stays paused indefinitely
+            it->second.torrentHandle.unset_flags(libtorrent::torrent_flags::auto_managed);
+            it->second.torrentHandle.pause(); // state will update automatically
         }
     }
 
@@ -121,9 +122,9 @@ namespace tc
         std::lock_guard lock(mtx_);
         if (auto it = map_.find(id); it != map_.end())
         {
+            // Restore auto_managed so libtorrent can manage the torrent again
+            it->second.torrentHandle.set_flags(libtorrent::torrent_flags::auto_managed);
             it->second.torrentHandle.resume();
-            it->second.manuallyPaused = false; // Clear manual pause flag
-            it->second.state = TorrentState::Downloading;
         }
     }
 
@@ -275,8 +276,8 @@ namespace tc
             // Update state FIRST, before sending stats
             TorrentState newState = stateFromLibtorrentState(st.state);
 
-            // Respect manual pause state - don't override if manually paused
-            if (entry.manuallyPaused || (entry.torrentHandle.flags() & libtorrent::torrent_flags::paused))
+            // Reflect libtorrent's paused flag
+            if (entry.torrentHandle.flags() & libtorrent::torrent_flags::paused)
             {
                 newState = TorrentState::Paused;
             }
@@ -290,9 +291,9 @@ namespace tc
                 st = entry.cachedStatus;
 
                 // Log the state change for debugging
-                printf("State change for torrent %d: %d -> %d (libtorrent state: %d, manually paused: %s)\n",
+                printf("State change for torrent %d: %d -> %d (libtorrent state: %d)\n",
                        id, static_cast<int>(entry.state), static_cast<int>(newState),
-                       static_cast<int>(st.state), entry.manuallyPaused ? "true" : "false");
+                       static_cast<int>(st.state));
             }
 
             // UPDATE: Apply state change BEFORE sending stats
@@ -310,7 +311,6 @@ namespace tc
                 stats.progress = st.progress;
                 stats.seeds = st.num_seeds;
                 stats.peers = st.num_peers;
-                stats.phase = phaseFromState(st.state);
                 stats.state = entry.state; // This will now be the updated state
 
                 // Thread-safe callback execution
@@ -441,25 +441,11 @@ namespace tc
         }
     }
 
-    std::string Manager::phaseFromState(torrent_status::state_t s) const
+    const char* Manager::stateToString(TorrentState state) const
     {
-        using st = torrent_status;
-        switch (s)
-        {
-        case st::checking_files:
-        case st::checking_resume_data:
-            return "checking";
-        case st::downloading_metadata:
-            return "downloadingMetadata";
-        case st::downloading:
-            return "downloading";
-        case st::seeding:
-        case st::finished:
-            return "seeding";
-        default:
-            return "unknown";
-        }
+        return tc::stateToString(state);
     }
+
 
     void Manager::applyConfig(const ManagerConfig &newConfig)
     {

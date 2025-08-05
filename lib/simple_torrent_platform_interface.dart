@@ -166,6 +166,17 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
   });
   Future<void> pause(int id);
   Future<void> resume(int id);
+
+  /// Toggle pause/resume based on current state
+  Future<void> togglePause(int id) async {
+    final state = await getState(id);
+    if (state == TorrentState.paused) {
+      await resume(id);
+    } else {
+      await pause(id);
+    }
+  }
+
   Future<void> cancel(int id);
   Future<void> finalise(int id);
 
@@ -198,8 +209,7 @@ class TorrentStats {
   final double progress; // 0.0-1.0
   final int seeds;
   final int peers;
-  final String phase;
-  final TorrentState? state; // Optional for backward compatibility
+  final TorrentState state;
 
   const TorrentStats({
     required this.id,
@@ -210,8 +220,7 @@ class TorrentStats {
     required this.progress,
     required this.seeds,
     required this.peers,
-    required this.phase,
-    this.state,
+    required this.state,
   });
 
   // Convenience getters for backward compatibility
@@ -227,11 +236,7 @@ class TorrentStats {
     progress: (m['progress'] as num).toDouble(),
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
-    phase: m['phase'] as String,
-    state:
-        m['state'] != null
-            ? TorrentStateExtension.fromString(m['state'] as String)
-            : null,
+    state: TorrentStateExtension.fromString(m['state'] as String),
   );
 
   /// Convert stats to a map for serialization
@@ -245,8 +250,7 @@ class TorrentStats {
       'progress': progress,
       'seeds': seeds,
       'peers': peers,
-      'phase': phase,
-      'state': state?.name,
+      'state': state.name,
     };
   }
 }

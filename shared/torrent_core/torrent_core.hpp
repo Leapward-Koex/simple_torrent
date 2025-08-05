@@ -44,7 +44,6 @@ namespace tc
         float progress = 0.0f;
         int seeds = 0;
         int peers = 0;
-        std::string phase;
         TorrentState state = TorrentState::Starting;
     };
 
@@ -115,7 +114,6 @@ namespace tc
             mutable std::chrono::steady_clock::time_point lastStatsUpdate;
             mutable libtorrent::torrent_status cachedStatus;
             mutable std::mutex callbackMutex;
-            bool manuallyPaused = false; // Track user-initiated pauses
 
             // Make Entry movable but not copyable
             Entry() = default;
@@ -135,7 +133,7 @@ namespace tc
         void handleMetadataFailedAlert(libtorrent::metadata_failed_alert *alert);
         void handleErrorAlert(libtorrent::torrent_error_alert *alert);
         TorrentState stateFromLibtorrentState(libtorrent::torrent_status::state_t state) const;
-        std::string phaseFromState(libtorrent::torrent_status::state_t state) const;
+        const char* stateToString(TorrentState state) const;
 
         // Single background thread
         std::thread pollThread_;

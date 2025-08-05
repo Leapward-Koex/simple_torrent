@@ -1,6 +1,12 @@
 library;
 
-export 'simple_torrent_platform_interface.dart' show TorrentStats, TorrentMetadata, TorrentState, TorrentInfo, TorrentConfig;
+export 'simple_torrent_platform_interface.dart'
+    show
+        TorrentStats,
+        TorrentMetadata,
+        TorrentState,
+        TorrentInfo,
+        TorrentConfig;
 
 import 'simple_torrent_platform_interface.dart';
 
@@ -13,13 +19,18 @@ class SimpleTorrent {
   static Future<void> init({TorrentConfig? config}) => _p.init(config: config);
 
   /// Update torrent manager configuration at runtime
-  static Future<void> updateConfig(TorrentConfig config) => _p.updateConfig(config);
+  static Future<void> updateConfig(TorrentConfig config) =>
+      _p.updateConfig(config);
 
-  static Future<int> start({required String magnet, required String path, String? displayName}) =>
-      _p.start(magnet: magnet, path: path, displayName: displayName);
+  static Future<int> start({
+    required String magnet,
+    required String path,
+    String? displayName,
+  }) => _p.start(magnet: magnet, path: path, displayName: displayName);
 
   static Future<void> pause(int id) => _p.pause(id);
   static Future<void> resume(int id) => _p.resume(id);
+  static Future<void> togglePause(int id) => _p.togglePause(id);
   static Future<void> cancel(int id) => _p.cancel(id);
   static Future<void> finalise(int id) => _p.finalise(id);
 
@@ -45,6 +56,9 @@ extension TorrentInfoExtensions on TorrentInfo {
   /// Resume this torrent
   Future<void> resume() => SimpleTorrent.resume(id);
 
+  /// Toggle pause/resume for this torrent
+  Future<void> togglePause() => SimpleTorrent.togglePause(id);
+
   /// Cancel this torrent
   Future<void> cancel() => SimpleTorrent.cancel(id);
 
@@ -65,7 +79,11 @@ class SimpleTorrentHelpers {
     required String path,
     String? displayName,
   }) async {
-    final id = await SimpleTorrent.start(magnet: magnet, path: path, displayName: displayName);
+    final id = await SimpleTorrent.start(
+      magnet: magnet,
+      path: path,
+      displayName: displayName,
+    );
     final stream = SimpleTorrent.statsFor(id);
     return (id, stream);
   }
