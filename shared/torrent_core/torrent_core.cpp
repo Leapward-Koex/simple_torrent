@@ -450,7 +450,7 @@ namespace tc
         case st::checking_resume_data:
             return "checking";
         case st::downloading_metadata:
-            return "downloading_metadata";
+            return "downloadingMetadata";
         case st::downloading:
             return "downloading";
         case st::seeding:
