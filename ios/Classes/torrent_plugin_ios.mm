@@ -28,7 +28,7 @@ static void handleStats(TorrentManager* tmgr, int id, const tc::Stats& stats) {
         std::string state;
         switch (stats.state) {
             case tc::TorrentState::Starting: state = "starting"; break;
-            case tc::TorrentState::DownloadingMetadata: state = "downloading_metadata"; break;
+            case tc::TorrentState::DownloadingMetadata: state = "downloadingMetadata"; break;
             case tc::TorrentState::Downloading: state = "downloading"; break;
             case tc::TorrentState::Seeding: state = "seeding"; break;
             case tc::TorrentState::Paused: state = "paused"; break;
@@ -152,7 +152,7 @@ const char* torrent_manager_get_state(TorrentManager* manager, int id) {
     
     switch (state) {
         case tc::TorrentState::Starting: stateStr = "starting"; break;
-        case tc::TorrentState::DownloadingMetadata: stateStr = "downloading_metadata"; break;
+        case tc::TorrentState::DownloadingMetadata: stateStr = "downloadingMetadata"; break;
         case tc::TorrentState::Downloading: stateStr = "downloading"; break;
         case tc::TorrentState::Seeding: stateStr = "seeding"; break;
         case tc::TorrentState::Paused: stateStr = "paused"; break;
@@ -189,7 +189,7 @@ CTorrentInfo* torrent_manager_get_info(TorrentManager* manager, int id) {
     std::string stateStr;
     switch (info.state) {
         case tc::TorrentState::Starting: stateStr = "starting"; break;
-        case tc::TorrentState::DownloadingMetadata: stateStr = "downloading_metadata"; break;
+        case tc::TorrentState::DownloadingMetadata: stateStr = "downloadingMetadata"; break;
         case tc::TorrentState::Downloading: stateStr = "downloading"; break;
         case tc::TorrentState::Seeding: stateStr = "seeding"; break;
         case tc::TorrentState::Paused: stateStr = "paused"; break;

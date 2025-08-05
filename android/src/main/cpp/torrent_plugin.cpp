@@ -25,7 +25,7 @@ static std::string torrentStateToString(tc::TorrentState state)
     case tc::TorrentState::Starting:
         return "starting";
     case tc::TorrentState::DownloadingMetadata:
-        return "downloading_metadata";
+        return "downloadingMetadata";
     case tc::TorrentState::Downloading:
         return "downloading";
     case tc::TorrentState::Seeding:

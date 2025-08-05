@@ -1,14 +1,22 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'simple_torrent_method_channel.dart';
 
-enum TorrentState { starting, downloadingMetadata, downloading, seeding, paused, error, stopped }
+enum TorrentState {
+  starting,
+  downloadingMetadata,
+  downloading,
+  seeding,
+  paused,
+  error,
+  stopped,
+}
 
 extension TorrentStateExtension on TorrentState {
   static TorrentState fromString(String value) {
     switch (value) {
       case 'starting':
         return TorrentState.starting;
-      case 'downloading_metadata':
+      case 'downloadingMetadata':
         return TorrentState.downloadingMetadata;
       case 'downloading':
         return TorrentState.downloading;
@@ -86,7 +94,7 @@ class TorrentConfig {
   @override
   String toString() {
     return 'TorrentConfig(maxTorrents: $maxTorrents, maxDownloadRate: $maxDownloadRate, '
-           'maxUploadRate: $maxUploadRate, enableDHT: $enableDHT, userAgent: $userAgent)';
+        'maxUploadRate: $maxUploadRate, enableDHT: $enableDHT, userAgent: $userAgent)';
   }
 }
 
@@ -151,7 +159,11 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
 
   Future<void> init({TorrentConfig? config});
   Future<void> updateConfig(TorrentConfig config);
-  Future<int> start({required String magnet, required String path, String? displayName});
+  Future<int> start({
+    required String magnet,
+    required String path,
+    String? displayName,
+  });
   Future<void> pause(int id);
   Future<void> resume(int id);
   Future<void> cancel(int id);
@@ -205,8 +217,6 @@ class TorrentStats {
   // Convenience getters for backward compatibility
   int get dlRate => downloadRate;
   int get ulRate => uploadRate;
-  @Deprecated('Use progress instead. This getter converts to percentage for backward compatibility.')
-  int get progressPct => (progress * 100).round();
 
   factory TorrentStats.fromMap(Map<dynamic, dynamic> m) => TorrentStats(
     id: m['id'] as int,
@@ -218,7 +228,10 @@ class TorrentStats {
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
     phase: m['phase'] as String,
-    state: m['state'] != null ? TorrentStateExtension.fromString(m['state'] as String) : null,
+    state:
+        m['state'] != null
+            ? TorrentStateExtension.fromString(m['state'] as String)
+            : null,
   );
 
   /// Convert stats to a map for serialization
