@@ -28,6 +28,7 @@ class SimpleTorrentPlugin : FlutterPlugin,
         fun sendStats(stats: Map<String, Any>) {
             mainHandler.post {
                 synchronized(pluginInstances) {
+                    Log.w(TAG, "Sending stats from Kotlin: ${stats}")
                     pluginInstances.forEach { plugin ->
                         plugin.handleStatsUpdate(stats)
                     }
