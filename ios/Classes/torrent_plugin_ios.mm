@@ -1,4 +1,5 @@
 #include "torrent_plugin_ios.hpp"
+#include "../../shared/torrent_core/torrent_state_helpers.hpp"
 #include "../../shared/torrent_core/torrent_core.hpp"
 #include <string>
 #include <unordered_map>
@@ -24,22 +25,11 @@ static void handleStats(TorrentManager* tmgr, int id, const tc::Stats& stats) {
     std::lock_guard<std::mutex> lock(tmgr->callbackMutex);
     auto it = tmgr->callbacks.find(id);
     if (it != tmgr->callbacks.end() && it->second.first) {
-        std::string phase = stats.phase;
-        std::string state;
-        switch (stats.state) {
-            case tc::TorrentState::Starting: state = "starting"; break;
-            case tc::TorrentState::DownloadingMetadata: state = "downloadingMetadata"; break;
-            case tc::TorrentState::Downloading: state = "downloading"; break;
-            case tc::TorrentState::Seeding: state = "seeding"; break;
-            case tc::TorrentState::Paused: state = "paused"; break;
-            case tc::TorrentState::Error: state = "error"; break;
-            case tc::TorrentState::Stopped: state = "stopped"; break;
-            default: state = "unknown"; break;
-        }
+        std::string state(tc::stateToStringView(stats.state));
         
-        it->second.first(stats.id, stats.dlRate, stats.ulRate, stats.pieces, 
+        it->second.first(stats.id, stats.dlRate, stats.ulRate, stats.pieces,
                         stats.piecesTotal, stats.progress, stats.seeds, stats.peers,
-                        phase.c_str(), state.c_str());
+                        state.c_str());
     }
 }
 

@@ -1,4 +1,5 @@
 #include "../../shared/torrent_core/torrent_core.hpp"
+#include "../../shared/torrent_core/torrent_state_helpers.hpp"
 #include <jni.h>
 #include <mutex>
 
@@ -20,25 +21,7 @@ static void detach() { g_vm->DetachCurrentThread(); }
 
 static std::string torrentStateToString(tc::TorrentState state)
 {
-    switch (state)
-    {
-    case tc::TorrentState::Starting:
-        return "starting";
-    case tc::TorrentState::DownloadingMetadata:
-        return "downloadingMetadata";
-    case tc::TorrentState::Downloading:
-        return "downloading";
-    case tc::TorrentState::Seeding:
-        return "seeding";
-    case tc::TorrentState::Paused:
-        return "paused";
-    case tc::TorrentState::Error:
-        return "error";
-    case tc::TorrentState::Stopped:
-        return "stopped";
-    default:
-        return "unknown";
-    }
+    return std::string(tc::stateToStringView(state));
 }
 
 static void statsToJava(const tc::Stats &s)
@@ -98,7 +81,7 @@ static void statsToJava(const tc::Stats &s)
     PUT_FLOAT("progress", s.progress)
     PUT("seeds", s.seeds)
     PUT("peers", s.peers)
-    PUT_STR("phase", s.phase);
+
     PUT_STR("state", torrentStateToString(s.state));
 
 #undef PUT

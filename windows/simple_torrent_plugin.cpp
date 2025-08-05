@@ -1,5 +1,6 @@
 #include "simple_torrent_plugin.h"
 #include "../../shared/torrent_core/torrent_core.hpp"
+#include "../../shared/torrent_core/torrent_state_helpers.hpp"
 
 // This must be included before many other Windows headers.
 #include <windows.h>
@@ -19,16 +20,7 @@ namespace simple_torrent {
 
 // Helper function to convert TorrentState to string
 std::string StateToString(tc::TorrentState state) {
-  switch (state) {
-    case tc::TorrentState::Starting: return "starting";
-    case tc::TorrentState::DownloadingMetadata: return "downloadingMetadata";
-    case tc::TorrentState::Downloading: return "downloading";
-    case tc::TorrentState::Seeding: return "seeding";
-    case tc::TorrentState::Paused: return "paused";
-    case tc::TorrentState::Error: return "error";
-    case tc::TorrentState::Stopped: return "stopped";
-    default: return "unknown";
-  }
+  return std::string(tc::stateToStringView(state));
 }
 
 // static
@@ -108,7 +100,6 @@ void SimpleTorrentPlugin::SendStatsEvent(const tc::Stats& stats) {
     stats_map[flutter::EncodableValue("progress")] = flutter::EncodableValue(static_cast<double>(stats.progress));
     stats_map[flutter::EncodableValue("seeds")] = flutter::EncodableValue(stats.seeds);
     stats_map[flutter::EncodableValue("peers")] = flutter::EncodableValue(stats.peers);
-    stats_map[flutter::EncodableValue("phase")] = flutter::EncodableValue(stats.phase);
     stats_map[flutter::EncodableValue("state")] = flutter::EncodableValue(StateToString(stats.state));
     
     stats_event_sink_->Success(flutter::EncodableValue(stats_map));
@@ -340,8 +331,7 @@ void SimpleTorrentPlugin::HandleMethodCall(
       completion_stats[flutter::EncodableValue("progress")] = flutter::EncodableValue(1.0);
       completion_stats[flutter::EncodableValue("seeds")] = flutter::EncodableValue(0);
       completion_stats[flutter::EncodableValue("peers")] = flutter::EncodableValue(0);
-      completion_stats[flutter::EncodableValue("phase")] = flutter::EncodableValue("completed");
-      completion_stats[flutter::EncodableValue("state")] = flutter::EncodableValue("completed");
+            completion_stats[flutter::EncodableValue("state")] = flutter::EncodableValue("completed");
       
       stats_event_sink_->Success(flutter::EncodableValue(completion_stats));
     }

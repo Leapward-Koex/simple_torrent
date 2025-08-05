@@ -29,10 +29,7 @@ class TorrentManagerPage extends StatefulWidget {
 }
 
 class _TorrentManagerPageState extends State<TorrentManagerPage> {
-  final _magnetController = TextEditingController(
-    text:
-        'magnet:?xt=urn:btih:UWIDDAFWVR3GG4DGABRUXCDOZKPZM7HS&dn=%5BSubsPlease%5D%20Kusuriya%20no%20Hitorigoto%20-%2042%20%281080p%29%20%5BE98E191D%5D.mkv&xl=1467892533&tr=http%3A%2F%2Fnyaa.tracker.wf%3A7777%2Fannounce&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2F9.rarbg.to%3A2710%2Fannounce&tr=udp%3A%2F%2F9.rarbg.me%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.internetwarriors.net%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.cyberia.is%3A6969%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker3.itzmx.com%3A6961%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.tiny-vps.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fretracker.lanta-net.ru%3A2710%2Fannounce&tr=http%3A%2F%2Fopen.acgnxtracker.com%3A80%2Fannounce&tr=wss%3A%2F%2Ftracker.openwebtorrent.com',
-  );
+  final _magnetController = TextEditingController(text: '');
   final _pathController = TextEditingController(
     text: '/storage/emulated/0/Download',
   );
@@ -76,7 +73,7 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
   void _listenToStats() {
     SimpleTorrent.statsStream.listen((stats) {
       print(
-        '📊 Stats update - ID: ${stats.id}, State: ${stats.state?.name ?? 'null'}, Phase: ${stats.phase}, Progress: ${(stats.progress * 100).toStringAsFixed(1)}%',
+        '📊 Stats update - ID: ${stats.id}, State: ${stats.state.name}, Progress: ${(stats.progress * 100).toStringAsFixed(1)}%',
       );
       setState(() {
         _stats[stats.id] = stats;
@@ -216,9 +213,7 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Torrent State: ${torrent.state.name}'),
-                if (stats != null)
-                  Text('Stats State: ${stats.state?.name ?? 'null'}'),
-                if (stats != null) Text('Phase: ${stats.phase}'),
+                if (stats != null) Text('Stats State: ${stats.state.name}'),
                 if (stats != null) Text('Progress: ${stats.progress * 100}%'),
                 if (stats != null)
                   Text(
