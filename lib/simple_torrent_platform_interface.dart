@@ -121,6 +121,19 @@ class TorrentInfo {
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
     );
   }
+
+  /// Convert torrent info to a map for serialization
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'magnetUri': magnetUri,
+      'savePath': savePath,
+      'displayName': displayName,
+      'state': state.name,
+      'lastError': lastError,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+    };
+  }
 }
 
 /// Cross-platform contract.
@@ -142,6 +155,7 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
   Future<void> pause(int id);
   Future<void> resume(int id);
   Future<void> cancel(int id);
+  Future<void> finalise(int id);
 
   // New management API
   Future<List<int>> getActiveTorrentIds();
@@ -169,7 +183,7 @@ class TorrentStats {
   final int uploadRate; // bytes/s
   final int pieces;
   final int piecesTotal;
-  final int progress; // 0-100
+  final double progress; // 0.0-1.0
   final int seeds;
   final int peers;
   final String phase;
@@ -191,7 +205,8 @@ class TorrentStats {
   // Convenience getters for backward compatibility
   int get dlRate => downloadRate;
   int get ulRate => uploadRate;
-  int get progressPct => progress;
+  @Deprecated('Use progress instead. This getter converts to percentage for backward compatibility.')
+  int get progressPct => (progress * 100).round();
 
   factory TorrentStats.fromMap(Map<dynamic, dynamic> m) => TorrentStats(
     id: m['id'] as int,
@@ -199,12 +214,28 @@ class TorrentStats {
     uploadRate: m['upload_rate'] as int,
     pieces: m['pieces'] as int,
     piecesTotal: m['pieces_total'] as int,
-    progress: m['progress'] as int,
+    progress: (m['progress'] as num).toDouble(),
     seeds: m['seeds'] as int,
     peers: m['peers'] as int,
     phase: m['phase'] as String,
     state: m['state'] != null ? TorrentStateExtension.fromString(m['state'] as String) : null,
   );
+
+  /// Convert stats to a map for serialization
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'download_rate': downloadRate,
+      'upload_rate': uploadRate,
+      'pieces': pieces,
+      'pieces_total': piecesTotal,
+      'progress': progress,
+      'seeds': seeds,
+      'peers': peers,
+      'phase': phase,
+      'state': state?.name,
+    };
+  }
 }
 
 class TorrentMetadata {
@@ -241,4 +272,19 @@ class TorrentMetadata {
     isPrivate: m['private'] as bool,
     isV2: m['v2'] as bool,
   );
+
+  /// Convert metadata to a map for serialization
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'total_bytes': totalBytes,
+      'piece_size': pieceSize,
+      'piece_count': pieceCount,
+      'file_count': fileCount,
+      'creation_date': creationDate,
+      'private': isPrivate,
+      'v2': isV2,
+    };
+  }
 }

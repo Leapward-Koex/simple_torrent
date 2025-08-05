@@ -31,7 +31,7 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
   final _nameController = TextEditingController();
 
   List<TorrentInfo> _torrents = [];
-  Map<int, TorrentStats> _stats = {};
+  final Map<int, TorrentStats> _stats = {};
   bool _initialized = false;
 
   @override
@@ -68,7 +68,7 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
   void _listenToStats() {
     SimpleTorrent.statsStream.listen((stats) {
       print(
-        '📊 Stats update - ID: ${stats.id}, State: ${stats.state?.name ?? 'null'}, Phase: ${stats.phase}, Progress: ${stats.progress}%',
+        '📊 Stats update - ID: ${stats.id}, State: ${stats.state?.name ?? 'null'}, Phase: ${stats.phase}, Progress: ${(stats.progress * 100).toStringAsFixed(1)}%',
       );
       setState(() {
         _stats[stats.id] = stats;
@@ -204,6 +204,9 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
                   case 'cancel':
                     await torrent.cancel();
                     break;
+                  case 'finalise':
+                    await torrent.finalise();
+                    break;
                 }
                 await _refreshTorrents();
               },
@@ -212,6 +215,7 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
                     const PopupMenuItem(value: 'pause', child: Text('Pause')),
                     const PopupMenuItem(value: 'resume', child: Text('Resume')),
                     const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
+                    const PopupMenuItem(value: 'finalise', child: Text('Finalise')),
                   ],
             ),
           ),

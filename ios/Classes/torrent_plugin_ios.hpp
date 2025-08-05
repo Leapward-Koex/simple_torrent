@@ -11,7 +11,7 @@ extern "C"
 
     // Callback function pointers for iOS
     typedef void (*StatsCallback)(int id, int dlRate, int ulRate, int pieces, int piecesTotal,
-                                  int progressPct, int seeds, int peers, const char *phase, const char *state);
+                                  float progress, int seeds, int peers, const char *phase, const char *state);
     typedef void (*MetadataCallback)(int id, const char *name, long long totalBytes, int pieceSize,
                                      int pieceCount, int fileCount, long long creationDate,
                                      bool isPrivate, bool isV2);
@@ -31,6 +31,7 @@ extern "C"
     void torrent_manager_pause(TorrentManager *manager, int id);
     void torrent_manager_resume(TorrentManager *manager, int id);
     void torrent_manager_cancel(TorrentManager *manager, int id);
+    void torrent_manager_finalise(TorrentManager *manager, int id);
 
     // Query operations
     int *torrent_manager_get_active_ids(TorrentManager *manager, int *count);
