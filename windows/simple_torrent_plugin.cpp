@@ -21,7 +21,7 @@ namespace simple_torrent {
 std::string StateToString(tc::TorrentState state) {
   switch (state) {
     case tc::TorrentState::Starting: return "starting";
-    case tc::TorrentState::DownloadingMetadata: return "downloading_metadata";
+    case tc::TorrentState::DownloadingMetadata: return "downloadingMetadata";
     case tc::TorrentState::Downloading: return "downloading";
     case tc::TorrentState::Seeding: return "seeding";
     case tc::TorrentState::Paused: return "paused";
@@ -403,7 +403,7 @@ void SimpleTorrentPlugin::HandleMethodCall(
     std::string state_str;
     switch (state) {
       case tc::TorrentState::Starting: state_str = "starting"; break;
-      case tc::TorrentState::DownloadingMetadata: state_str = "downloading_metadata"; break;
+      case tc::TorrentState::DownloadingMetadata: state_str = "downloadingMetadata"; break;
       case tc::TorrentState::Downloading: state_str = "downloading"; break;
       case tc::TorrentState::Seeding: state_str = "seeding"; break;
       case tc::TorrentState::Paused: state_str = "paused"; break;

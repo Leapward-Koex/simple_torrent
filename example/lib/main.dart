@@ -12,7 +12,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Simple Torrent Demo',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple), useMaterial3: true),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
       home: const TorrentManagerPage(),
     );
   }
@@ -26,8 +29,13 @@ class TorrentManagerPage extends StatefulWidget {
 }
 
 class _TorrentManagerPageState extends State<TorrentManagerPage> {
-  final _magnetController = TextEditingController();
-  final _pathController = TextEditingController(text: '/storage/emulated/0/Download');
+  final _magnetController = TextEditingController(
+    text:
+        'magnet:?xt=urn:btih:UWIDDAFWVR3GG4DGABRUXCDOZKPZM7HS&dn=%5BSubsPlease%5D%20Kusuriya%20no%20Hitorigoto%20-%2042%20%281080p%29%20%5BE98E191D%5D.mkv&xl=1467892533&tr=http%3A%2F%2Fnyaa.tracker.wf%3A7777%2Fannounce&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2F9.rarbg.to%3A2710%2Fannounce&tr=udp%3A%2F%2F9.rarbg.me%3A2710%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.internetwarriors.net%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.cyberia.is%3A6969%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker3.itzmx.com%3A6961%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.tiny-vps.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fretracker.lanta-net.ru%3A2710%2Fannounce&tr=http%3A%2F%2Fopen.acgnxtracker.com%3A80%2Fannounce&tr=wss%3A%2F%2Ftracker.openwebtorrent.com',
+  );
+  final _pathController = TextEditingController(
+    text: '/storage/emulated/0/Download',
+  );
   final _nameController = TextEditingController();
 
   List<TorrentInfo> _torrents = [];
@@ -107,7 +115,9 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
       _magnetController.clear();
       _nameController.clear();
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Torrent started with ID: $id')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Torrent started with ID: $id')));
 
       await _refreshTorrents();
     } catch (e) {
@@ -116,7 +126,9 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   @override
@@ -126,7 +138,10 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Torrent Manager'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshTorrents),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshTorrents,
+          ),
           PopupMenuButton<String>(
             onSelected: (value) async {
               switch (value) {
@@ -142,14 +157,24 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
             },
             itemBuilder:
                 (context) => [
-                  const PopupMenuItem(value: 'pauseAll', child: Text('Pause All')),
-                  const PopupMenuItem(value: 'resumeAll', child: Text('Resume All')),
+                  const PopupMenuItem(
+                    value: 'pauseAll',
+                    child: Text('Pause All'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'resumeAll',
+                    child: Text('Resume All'),
+                  ),
                 ],
           ),
         ],
       ),
       body: _initialized ? _buildBody() : _buildLoading(),
-      floatingActionButton: FloatingActionButton(onPressed: _showAddTorrentDialog, tooltip: 'Add Torrent', child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddTorrentDialog,
+        tooltip: 'Add Torrent',
+        child: const Icon(Icons.add),
+      ),
     );
   }
 
@@ -157,7 +182,11 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
     return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [CircularProgressIndicator(), SizedBox(height: 16), Text('Initializing torrent manager...')],
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Initializing torrent manager...'),
+        ],
       ),
     );
   }
@@ -165,7 +194,11 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
   Widget _buildBody() {
     if (_torrents.isEmpty) {
       return const Center(
-        child: Text('No torrents active.\nTap + to add a torrent.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+        child: Text(
+          'No torrents active.\nTap + to add a torrent.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16),
+        ),
       );
     }
 
@@ -183,12 +216,21 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Torrent State: ${torrent.state.name}'),
-                if (stats != null) Text('Stats State: ${stats.state?.name ?? 'null'}'),
+                if (stats != null)
+                  Text('Stats State: ${stats.state?.name ?? 'null'}'),
                 if (stats != null) Text('Phase: ${stats.phase}'),
-                if (stats != null) Text('Progress: ${stats.progressPct}%'),
-                if (stats != null) Text('Speed: ↓${_formatBytes(stats.dlRate)}/s ↑${_formatBytes(stats.ulRate)}/s'),
-                if (stats != null) Text('Peers: ${stats.peers} (${stats.seeds} seeds)'),
-                if (torrent.lastError.isNotEmpty) Text('Error: ${torrent.lastError}', style: const TextStyle(color: Colors.red)),
+                if (stats != null) Text('Progress: ${stats.progress * 100}%'),
+                if (stats != null)
+                  Text(
+                    'Speed: ↓${_formatBytes(stats.dlRate)}/s ↑${_formatBytes(stats.ulRate)}/s',
+                  ),
+                if (stats != null)
+                  Text('Peers: ${stats.peers} (${stats.seeds} seeds)'),
+                if (torrent.lastError.isNotEmpty)
+                  Text(
+                    'Error: ${torrent.lastError}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
               ],
             ),
             leading: _buildStateIcon(torrent.state),
@@ -215,7 +257,10 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
                     const PopupMenuItem(value: 'pause', child: Text('Pause')),
                     const PopupMenuItem(value: 'resume', child: Text('Resume')),
                     const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
-                    const PopupMenuItem(value: 'finalise', child: Text('Finalise')),
+                    const PopupMenuItem(
+                      value: 'finalise',
+                      child: Text('Finalise'),
+                    ),
                   ],
             ),
           ),
@@ -260,17 +305,31 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
               children: [
                 TextField(
                   controller: _magnetController,
-                  decoration: const InputDecoration(labelText: 'Magnet URI', hintText: 'magnet:?xt=urn:btih:...'),
+                  decoration: const InputDecoration(
+                    labelText: 'Magnet URI',
+                    hintText: 'magnet:?xt=urn:btih:...',
+                  ),
                   maxLines: 3,
                 ),
                 const SizedBox(height: 8),
-                TextField(controller: _pathController, decoration: const InputDecoration(labelText: 'Download Path')),
+                TextField(
+                  controller: _pathController,
+                  decoration: const InputDecoration(labelText: 'Download Path'),
+                ),
                 const SizedBox(height: 8),
-                TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Display Name (optional)')),
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Display Name (optional)',
+                  ),
+                ),
               ],
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
