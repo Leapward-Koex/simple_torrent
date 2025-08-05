@@ -52,6 +52,9 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   Future<void> cancel(int id) => _methods.invokeMethod('cancel', {'id': id}).timeout(_methodTimeout);
 
   @override
+  Future<void> finalise(int id) => _methods.invokeMethod('finalise', {'id': id}).timeout(_methodTimeout);
+
+  @override
   Future<List<int>> getActiveTorrentIds() async {
     try {
       final result = await _methods.invokeMethod<List<dynamic>>('getActiveTorrentIds');

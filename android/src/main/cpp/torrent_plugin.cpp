@@ -51,9 +51,15 @@ static void statsToJava(const tc::Stats &s)
                                      "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
     jclass intCls = env->FindClass("java/lang/Integer");
     jmethodID val = env->GetStaticMethodID(intCls, "valueOf", "(I)Ljava/lang/Integer;");
+    
+    jclass floatCls = env->FindClass("java/lang/Float");
+    jmethodID floatVal = env->GetStaticMethodID(floatCls, "valueOf", "(F)Ljava/lang/Float;");
 
     auto jintObj = [&](int v)
     { return env->CallStaticObjectMethod(intCls, val, v); };
+    
+    auto jfloatObj = [&](float v)
+    { return env->CallStaticObjectMethod(floatCls, floatVal, v); };
 
     jobject map = env->NewObject(mapCls, ctor);
 #define PUT_STR(key, str)                            \
@@ -74,19 +80,29 @@ static void statsToJava(const tc::Stats &s)
         env->DeleteLocalRef(_v);                 \
     }
 
+#define PUT_FLOAT(k, v)                          \
+    {                                            \
+        jstring _k = env->NewStringUTF(k);       \
+        jobject _v = jfloatObj(v);               \
+        env->CallObjectMethod(map, put, _k, _v); \
+        env->DeleteLocalRef(_k);                 \
+        env->DeleteLocalRef(_v);                 \
+    }
+
     PUT_STR("eventType", std::string("stats"));
     PUT("id", s.id)
     PUT("download_rate", s.dlRate)
     PUT("upload_rate", s.ulRate)
     PUT("pieces", s.pieces)
     PUT("pieces_total", s.piecesTotal)
-    PUT("progress", s.progressPct)
+    PUT_FLOAT("progress", s.progress)
     PUT("seeds", s.seeds)
     PUT("peers", s.peers)
     PUT_STR("phase", s.phase);
     PUT_STR("state", torrentStateToString(s.state));
 
 #undef PUT
+#undef PUT_FLOAT
 #undef PUT_STR
 
     env->CallStaticVoidMethod(g_cls, g_sendStats, map);
@@ -212,6 +228,12 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_cancelTorrent(JNIEnv *, jobject, jint id)
 {
     g_mgr->cancel(id);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_finaliseTorrent(JNIEnv *, jobject, jint id)
+{
+    g_mgr->finalise(id);
 }
 
 extern "C" JNIEXPORT jintArray JNICALL

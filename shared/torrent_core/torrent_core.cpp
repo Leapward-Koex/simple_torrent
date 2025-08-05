@@ -3,6 +3,7 @@
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/settings_pack.hpp>
+#include <libtorrent/torrent_flags.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -275,7 +276,7 @@ namespace tc
             TorrentState newState = stateFromLibtorrentState(st.state);
 
             // Respect manual pause state - don't override if manually paused
-            if (entry.manuallyPaused || st.paused)
+            if (entry.manuallyPaused || (entry.torrentHandle.flags() & libtorrent::torrent_flags::paused))
             {
                 newState = TorrentState::Paused;
             }
@@ -306,7 +307,7 @@ namespace tc
                 stats.ulRate = st.upload_payload_rate;
                 stats.pieces = st.num_pieces;
                 stats.piecesTotal = entry.torrentHandle.torrent_file() ? entry.torrentHandle.torrent_file()->num_pieces() : 0;
-                stats.progressPct = static_cast<int>(st.progress * 100.f);
+                stats.progress = st.progress;
                 stats.seeds = st.num_seeds;
                 stats.peers = st.num_peers;
                 stats.phase = phaseFromState(st.state);
@@ -317,12 +318,6 @@ namespace tc
                     std::lock_guard callbackLock(entry.callbackMutex);
                     entry.statsCallback(stats);
                 }
-            }
-
-            // Check if finished
-            if (st.is_seeding || st.is_finished)
-            {
-                finalise(id);
             }
         }
         catch (const std::exception &e)

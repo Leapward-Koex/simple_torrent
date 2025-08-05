@@ -41,7 +41,7 @@ namespace tc
         int ulRate = 0;
         int pieces = 0;
         int piecesTotal = 0;
-        int progressPct = 0;
+        float progress = 0.0f;
         int seeds = 0;
         int peers = 0;
         std::string phase;

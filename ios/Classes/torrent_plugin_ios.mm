@@ -38,7 +38,7 @@ static void handleStats(TorrentManager* tmgr, int id, const tc::Stats& stats) {
         }
         
         it->second.first(stats.id, stats.dlRate, stats.ulRate, stats.pieces, 
-                        stats.piecesTotal, stats.progressPct, stats.seeds, stats.peers,
+                        stats.piecesTotal, stats.progress, stats.seeds, stats.peers,
                         phase.c_str(), state.c_str());
     }
 }
@@ -114,6 +114,14 @@ void torrent_manager_resume(TorrentManager* manager, int id) {
 void torrent_manager_cancel(TorrentManager* manager, int id) {
     if (manager) {
         manager->manager->cancel(id);
+        std::lock_guard<std::mutex> lock(manager->callbackMutex);
+        manager->callbacks.erase(id);
+    }
+}
+
+void torrent_manager_finalise(TorrentManager* manager, int id) {
+    if (manager) {
+        manager->manager->finalise(id);
         std::lock_guard<std::mutex> lock(manager->callbackMutex);
         manager->callbacks.erase(id);
     }

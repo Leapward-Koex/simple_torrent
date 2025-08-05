@@ -3,10 +3,13 @@
 
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
+#include <flutter/event_channel.h>
+#include <flutter/event_sink.h>
 
 #include <memory>
 #include <unordered_map>
 #include <functional>
+#include <mutex>
 
 // Forward declaration
 namespace tc {
@@ -21,7 +24,7 @@ class SimpleTorrentPlugin : public flutter::Plugin {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
 
-  SimpleTorrentPlugin();
+  SimpleTorrentPlugin(flutter::PluginRegistrarWindows *registrar);
 
   virtual ~SimpleTorrentPlugin();
 
@@ -35,9 +38,19 @@ class SimpleTorrentPlugin : public flutter::Plugin {
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
  private:
+  // Event channel handlers
+  std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> stats_event_sink_;
+  std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> metadata_event_sink_;
+  
+  // Callback handlers
+  void SendStatsEvent(const tc::Stats& stats);
+  void SendMetadataEvent(const tc::Metadata& metadata);
+  
+  flutter::PluginRegistrarWindows* registrar_;
   std::unique_ptr<tc::Manager> manager_;
   std::unordered_map<int, std::pair<std::function<void(const tc::Stats&)>, 
                                    std::function<void(const tc::Metadata&)>>> callbacks_;
+  std::mutex callbacks_mutex_;
 };
 
 }  // namespace simple_torrent

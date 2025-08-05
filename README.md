@@ -85,7 +85,8 @@ final id = await SimpleTorrent.start(
 // Control torrents
 await SimpleTorrent.pause(id);
 await SimpleTorrent.resume(id);
-await SimpleTorrent.cancel(id);
+await SimpleTorrent.cancel(id);  // Cancels torrent and deletes files
+await SimpleTorrent.finalise(id);  // Removes torrent but keeps files
 
 // Get torrent information
 final info = await SimpleTorrent.getTorrentInfo(id);
@@ -107,7 +108,7 @@ final activeIds = await SimpleTorrent.getActiveTorrentIds();
 ```dart
 // Listen to progress updates for all torrents
 SimpleTorrent.statsStream.listen((stats) {
-  print('Torrent ${stats.id}: ${stats.progress}% complete');
+  print('Torrent ${stats.id}: ${(stats.progress * 100).toStringAsFixed(1)}% complete');
   print('Download: ${stats.downloadRate} B/s');
   print('Upload: ${stats.uploadRate} B/s');
   print('Peers: ${stats.peers} (${stats.seeds} seeds)');
@@ -125,7 +126,7 @@ SimpleTorrent.metadataStream.listen((metadata) {
 // Monitor a specific torrent
 final specificStream = SimpleTorrent.statsFor(torrentId);
 specificStream.listen((stats) {
-  print('Progress: ${stats.progress}%');
+  print('Progress: ${(stats.progress * 100).toStringAsFixed(1)}%');
 });
 ```
 
@@ -139,7 +140,7 @@ final (id, stream) = await SimpleTorrentHelpers.startAndWatch(
 );
 
 stream.listen((stats) {
-  print('Progress: ${stats.progress}%');
+  print('Progress: ${(stats.progress * 100).toStringAsFixed(1)}%');
 });
 
 // Bulk operations
@@ -158,7 +159,8 @@ final torrent = await SimpleTorrent.getTorrentInfo(id);
 
 await torrent.pause();           // Pause this torrent
 await torrent.resume();          // Resume this torrent  
-await torrent.cancel();          // Cancel this torrent
+await torrent.cancel();          // Cancel this torrent (deletes files)
+await torrent.finalise();          // Finish this torrent (keeps files)
 final state = await torrent.getCurrentState(); // Get current state
 final stream = torrent.statsStream;            // Get stats stream
 ```
@@ -188,7 +190,7 @@ class TorrentStats {
   final int uploadRate;      // Upload speed (bytes/s)
   final int pieces;          // Downloaded pieces
   final int piecesTotal;     // Total pieces
-  final int progress;        // Progress (0-100)
+  final double progress;     // Progress (0.0-1.0)
   final int seeds;           // Number of seeds
   final int peers;           // Number of peers
   final String phase;        // Current phase
@@ -308,7 +310,7 @@ class _TorrentDownloaderState extends State<TorrentDownloader> {
           final stats = _stats.values.elementAt(index);
           return ListTile(
             title: Text('Torrent ${stats.id}'),
-            subtitle: Text('${stats.progress}% - ${stats.phase}'),
+            subtitle: Text('${(stats.progress * 100).toStringAsFixed(1)}% - ${stats.phase}'),
             trailing: Text('${_formatSpeed(stats.downloadRate)}'),
           );
         },
