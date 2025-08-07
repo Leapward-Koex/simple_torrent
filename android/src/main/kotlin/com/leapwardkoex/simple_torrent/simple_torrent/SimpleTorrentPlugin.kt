@@ -72,6 +72,12 @@ class SimpleTorrentPlugin : FlutterPlugin,
     private external fun startTorrentWithName(magnet: String, dest: String, name: String): Int
 
     @Keep
+    private external fun startTorrentFromData(data: ByteArray, dest: String, name: String?): Int
+
+    @Keep
+    private external fun startTorrentFromFile(filePath: String, dest: String, name: String?): Int
+
+    @Keep
     private external fun pauseTorrent(id: Int)
 
     @Keep
@@ -281,6 +287,68 @@ class SimpleTorrentPlugin : FlutterPlugin,
                         }
                     } catch (e: Exception) {
                         result.error("ERROR", "Failed to start torrent: ${e.message}", null)
+                    }
+                }
+            }
+
+            "startFromTorrentData" -> {
+                val data = call.argument<ByteArray>("data")
+                val destination = call.argument<String>("destination")
+                val displayName = call.argument<String>("displayName")
+                
+                if (data == null || destination.isNullOrEmpty()) {
+                    result.error("INVALID_ARGS", "data and destination are required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val torrentId = withTimeoutOrNull(METHOD_TIMEOUT_MS) {
+                            withContext(Dispatchers.IO) {
+                                startTorrentFromData(data, destination, displayName)
+                            }
+                        }
+                        
+                        if (torrentId == null) {
+                            result.error("TIMEOUT", "Torrent start from data operation timed out", null)
+                        } else if (torrentId == 0) {
+                            result.error("FAILED", "Could not start torrent from data", null)
+                        } else {
+                            result.success(torrentId)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to start torrent from data: ${e.message}", null)
+                    }
+                }
+            }
+
+            "startFromTorrentFile" -> {
+                val torrentFilePath = call.argument<String>("torrentFilePath")
+                val destination = call.argument<String>("destination")
+                val displayName = call.argument<String>("displayName")
+                
+                if (torrentFilePath.isNullOrEmpty() || destination.isNullOrEmpty()) {
+                    result.error("INVALID_ARGS", "torrentFilePath and destination are required", null)
+                    return
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val torrentId = withTimeoutOrNull(METHOD_TIMEOUT_MS) {
+                            withContext(Dispatchers.IO) {
+                                startTorrentFromFile(torrentFilePath, destination, displayName)
+                            }
+                        }
+                        
+                        if (torrentId == null) {
+                            result.error("TIMEOUT", "Torrent start from file operation timed out", null)
+                        } else if (torrentId == 0) {
+                            result.error("FAILED", "Could not start torrent from file", null)
+                        } else {
+                            result.success(torrentId)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Failed to start torrent from file: ${e.message}", null)
                     }
                 }
             }

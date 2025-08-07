@@ -12,7 +12,13 @@ func torrent_manager_destroy(_ manager: UnsafeMutableRawPointer)
 func torrent_manager_apply_config(_ manager: UnsafeMutableRawPointer, _ maxTorrents: Int32, _ maxDownloadRate: Int32, _ maxUploadRate: Int32, _ enableDHT: Bool, _ userAgent: UnsafePointer<CChar>?)
 
 @_silgen_name("torrent_manager_start")
-func torrent_manager_start(_ manager: UnsafeMutableRawPointer, _ magnet: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
+func torrent_manager_start(_ manager: UnsafeMutableRawPointer, _ magnet: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
+
+@_silgen_name("torrent_manager_start_from_data")
+func torrent_manager_start_from_data(_ manager: UnsafeMutableRawPointer, _ data: UnsafePointer<CChar>, _ dataSize: Int32, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
+
+@_silgen_name("torrent_manager_start_from_file")
+func torrent_manager_start_from_file(_ manager: UnsafeMutableRawPointer, _ filePath: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
 
 @_silgen_name("torrent_manager_pause")
 func torrent_manager_pause(_ manager: UnsafeMutableRawPointer, _ id: Int32)
@@ -106,6 +112,10 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
             handleInit(call: call, result: result, manager: manager)
         case "start":
             handleStart(call: call, result: result, manager: manager)
+        case "startFromTorrentData":
+            handleStartFromTorrentData(call: call, result: result, manager: manager)
+        case "startFromTorrentFile":
+            handleStartFromTorrentFile(call: call, result: result, manager: manager)
         case "pause":
             handlePause(call: call, result: result, manager: manager)
         case "resume":
@@ -188,6 +198,96 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
             result(Int(torrentId))
         } else {
             result(FlutterError(code: "FAILED", message: "Could not start torrent", details: nil))
+        }
+    }
+    
+    private func handleStartFromTorrentData(call: FlutterMethodCall, result: @escaping FlutterResult, manager: UnsafeMutableRawPointer) {
+        guard let args = call.arguments as? [String: Any],
+              let data = args["data"] as? FlutterStandardTypedData,
+              let destination = args["destination"] as? String else {
+            result(FlutterError(code: "INVALID_ARGS", message: "data and destination are required", details: nil))
+            return
+        }
+        
+        let displayName = args["displayName"] as? String
+        
+        let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, phase, state in
+            DispatchQueue.main.async {
+                if let instance = SimpleTorrentPlugin.sharedInstance {
+                    instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), phase: String(cString: phase), state: String(cString: state))
+                }
+            }
+        }
+        
+        let metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void = { id, name, totalBytes, pieceSize, pieceCount, fileCount, creationDate, isPrivate, isV2 in
+            DispatchQueue.main.async {
+                if let instance = SimpleTorrentPlugin.sharedInstance {
+                    instance.sendMetadata(id: Int(id), name: String(cString: name), totalBytes: Int(totalBytes), pieceSize: Int(pieceSize), pieceCount: Int(pieceCount), fileCount: Int(fileCount), creationDate: Int(creationDate), isPrivate: isPrivate, isV2: isV2)
+                }
+            }
+        }
+        
+        let torrentId = data.data.withUnsafeBytes { dataBytes in
+            destination.withCString { pathPtr in
+                if let displayName = displayName {
+                    return displayName.withCString { namePtr in
+                        torrent_manager_start_from_data(manager, dataBytes.bindMemory(to: CChar.self).baseAddress!, Int32(dataBytes.count), pathPtr, namePtr, statsCallback, metadataCallback)
+                    }
+                } else {
+                    return torrent_manager_start_from_data(manager, dataBytes.bindMemory(to: CChar.self).baseAddress!, Int32(dataBytes.count), pathPtr, nil, statsCallback, metadataCallback)
+                }
+            }
+        }
+        
+        if torrentId > 0 {
+            result(Int(torrentId))
+        } else {
+            result(FlutterError(code: "FAILED", message: "Could not start torrent from data", details: nil))
+        }
+    }
+    
+    private func handleStartFromTorrentFile(call: FlutterMethodCall, result: @escaping FlutterResult, manager: UnsafeMutableRawPointer) {
+        guard let args = call.arguments as? [String: Any],
+              let torrentFilePath = args["torrentFilePath"] as? String,
+              let destination = args["destination"] as? String else {
+            result(FlutterError(code: "INVALID_ARGS", message: "torrentFilePath and destination are required", details: nil))
+            return
+        }
+        
+        let displayName = args["displayName"] as? String
+        
+        let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, phase, state in
+            DispatchQueue.main.async {
+                if let instance = SimpleTorrentPlugin.sharedInstance {
+                    instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), phase: String(cString: phase), state: String(cString: state))
+                }
+            }
+        }
+        
+        let metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void = { id, name, totalBytes, pieceSize, pieceCount, fileCount, creationDate, isPrivate, isV2 in
+            DispatchQueue.main.async {
+                if let instance = SimpleTorrentPlugin.sharedInstance {
+                    instance.sendMetadata(id: Int(id), name: String(cString: name), totalBytes: Int(totalBytes), pieceSize: Int(pieceSize), pieceCount: Int(pieceCount), fileCount: Int(fileCount), creationDate: Int(creationDate), isPrivate: isPrivate, isV2: isV2)
+                }
+            }
+        }
+        
+        let torrentId = torrentFilePath.withCString { filePathPtr in
+            destination.withCString { pathPtr in
+                if let displayName = displayName {
+                    return displayName.withCString { namePtr in
+                        torrent_manager_start_from_file(manager, filePathPtr, pathPtr, namePtr, statsCallback, metadataCallback)
+                    }
+                } else {
+                    return torrent_manager_start_from_file(manager, filePathPtr, pathPtr, nil, statsCallback, metadataCallback)
+                }
+            }
+        }
+        
+        if torrentId > 0 {
+            result(Int(torrentId))
+        } else {
+            result(FlutterError(code: "FAILED", message: "Could not start torrent from file", details: nil))
         }
     }
     

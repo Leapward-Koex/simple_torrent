@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:simple_torrent/simple_torrent.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'dart:typed_data';
+import 'dart:io';
 
 void main() {
   runApp(const MyApp());
@@ -29,7 +32,10 @@ class TorrentManagerPage extends StatefulWidget {
 }
 
 class _TorrentManagerPageState extends State<TorrentManagerPage> {
-  final _magnetController = TextEditingController(text: '');
+  final _magnetController = TextEditingController(
+    text:
+        'magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent',
+  );
   final _pathController = TextEditingController(
     text: '/storage/emulated/0/Download',
   );
@@ -122,6 +128,53 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
     }
   }
 
+  /// Adds the bundled demo torrent (.torrent file) located in assets.
+  Future<void> _addDataAssetTorrent() async {
+    try {
+      final byteData = await rootBundle.load('assets/big-buck-bunny.torrent');
+      final id = await SimpleTorrent.startFromData(
+        data: byteData.buffer.asUint8List(),
+        downloadPath:
+            _pathController.text.isEmpty
+                ? '/storage/emulated/0/Download'
+                : _pathController.text,
+        displayName: 'Big Buck Bunny (from data demo)',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Demo torrent started with ID: $id')),
+      );
+    } catch (e) {
+      _showError('Failed to start demo torrent: $e');
+    }
+  }
+
+  Future<void> _addFileAssetTorrent() async {
+    try {
+      // Load asset bytes
+      final byteData = await rootBundle.load('assets/big-buck-bunny.torrent');
+      // Write to a temporary file
+      final tempDir = await Directory.systemTemp.createTemp('torrent_');
+      final filePath = '${tempDir.path}/big-buck-bunny.torrent';
+      final file = File(filePath);
+      await file.writeAsBytes(byteData.buffer.asUint8List());
+
+      // Start torrent from file
+      final id = await SimpleTorrent.startFromTorrentFile(
+        torrentFilePath: filePath,
+        downloadPath:
+            _pathController.text.isEmpty
+                ? '/storage/emulated/0/Download'
+                : _pathController.text,
+        displayName: 'Big Buck Bunny (from file demo)',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Demo torrent started with ID: $id')),
+      );
+    } catch (e) {
+      _showError('Failed to start demo torrent from file: $e');
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
@@ -150,6 +203,14 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
                   await SimpleTorrentHelpers.resumeAll();
                   await _refreshTorrents();
                   break;
+                case 'addDataAsset':
+                  await _addDataAssetTorrent();
+                  await _refreshTorrents();
+                  break;
+                case 'addFileAsset':
+                  await _addFileAssetTorrent();
+                  await _refreshTorrents();
+                  break;
               }
             },
             itemBuilder:
@@ -161,6 +222,14 @@ class _TorrentManagerPageState extends State<TorrentManagerPage> {
                   const PopupMenuItem(
                     value: 'resumeAll',
                     child: Text('Resume All'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'addDataAsset',
+                    child: Text('Add Demo Torrent (data)'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'addFileAsset',
+                    child: Text('Add Demo Torrent (file)'),
                   ),
                 ],
           ),

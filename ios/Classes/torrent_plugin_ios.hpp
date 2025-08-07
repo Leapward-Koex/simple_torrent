@@ -28,6 +28,15 @@ extern "C"
     int torrent_manager_start(TorrentManager *manager, const char *magnet, const char *path,
                               const char *displayName, StatsCallback statsCallback,
                               MetadataCallback metadataCallback);
+    
+    int torrent_manager_start_from_data(TorrentManager *manager, const char *data, int dataSize,
+                                        const char *path, const char *displayName,
+                                        StatsCallback statsCallback, MetadataCallback metadataCallback);
+    
+    int torrent_manager_start_from_file(TorrentManager *manager, const char *filePath,
+                                        const char *path, const char *displayName,
+                                        StatsCallback statsCallback, MetadataCallback metadataCallback);
+    
     void torrent_manager_pause(TorrentManager *manager, int id);
     void torrent_manager_resume(TorrentManager *manager, int id);
     void torrent_manager_cancel(TorrentManager *manager, int id);

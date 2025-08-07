@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'simple_torrent_method_channel.dart';
 
@@ -164,6 +165,21 @@ abstract class SimpleTorrentPlatform extends PlatformInterface {
     required String path,
     String? displayName,
   });
+
+  /// Start a torrent from .torrent file data
+  Future<int> startFromTorrentData({
+    required Uint8List data,
+    required String path,
+    String? displayName,
+  });
+
+  /// Start a torrent from a .torrent file on disk
+  Future<int> startFromTorrentFile({
+    required String torrentFilePath,
+    required String path,
+    String? displayName,
+  });
+
   Future<void> pause(int id);
   Future<void> resume(int id);
 

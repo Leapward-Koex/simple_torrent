@@ -8,6 +8,8 @@ export 'simple_torrent_platform_interface.dart'
         TorrentInfo,
         TorrentConfig;
 
+import 'dart:typed_data';
+
 import 'simple_torrent_platform_interface.dart';
 
 /// Public API used by Flutter apps.
@@ -27,6 +29,32 @@ class SimpleTorrent {
     required String path,
     String? displayName,
   }) => _p.start(magnet: magnet, path: path, displayName: displayName);
+
+  /// Start a torrent from a .torrent file on disk.
+  static Future<int> startFromTorrentFile({
+    required String torrentFilePath,
+    required String downloadPath,
+    String? displayName,
+  }) async {
+    return _p.startFromTorrentFile(
+      torrentFilePath: torrentFilePath,
+      path: downloadPath,
+      displayName: displayName,
+    );
+  }
+
+  /// Start a torrent from in-memory .torrent bytes.
+  static Future<int> startFromData({
+    required Uint8List data,
+    required String downloadPath,
+    String? displayName,
+  }) async {
+    return _p.startFromTorrentData(
+      data: data,
+      path: downloadPath,
+      displayName: displayName,
+    );
+  }
 
   static Future<void> pause(int id) => _p.pause(id);
   static Future<void> resume(int id) => _p.resume(id);
