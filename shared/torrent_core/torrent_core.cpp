@@ -5,6 +5,7 @@
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/settings_pack.hpp>
 #include <libtorrent/torrent_flags.hpp>
+#include <libtorrent/load_torrent.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -105,6 +106,145 @@ namespace tc
 
         return id;
     }
+
+    int Manager::startFromTorrentData(const std::vector<char> &torrentData,
+                                      const std::string &path,
+                                      StatsCb cb,
+                                      MetadataCb metaCb,
+                                      const std::string &displayName)
+    {
+        if (torrentData.empty() || path.empty() || !cb) {
+            return 0; // Invalid parameters
+        }
+
+        // Parse the in‑memory buffer FIRST (may throw) – do this outside the lock.
+        libtorrent::add_torrent_params params;
+        try {
+            params = libtorrent::load_torrent_buffer(
+                    libtorrent::span<char const>(torrentData.data(), torrentData.size()));
+        } catch (std::exception const &) {
+            return 0; // Not a valid .torrent buffer
+        }
+
+        params.save_path = path;
+
+        // ───────────────────────────── Session insertion ────────────────────────────
+        std::lock_guard lock(mtx_);
+        if (static_cast<int>(map_.size()) >= config_.maxTorrents) {
+            return 0; // Over torrent limit
+        }
+
+        int id = nextId_++;
+        libtorrent::error_code ec;
+        libtorrent::torrent_handle handle = ses_->add_torrent(params, ec);
+        if (ec || !handle.is_valid()) {
+            return 0; // Failed to add
+        }
+
+        auto [it, inserted] = map_.try_emplace(id);
+        if (!inserted) {
+            return 0;
+        }
+
+        Entry &entry = it->second;
+        entry.torrentHandle = std::move(handle);
+        entry.statsCallback = std::move(cb);
+        entry.metaCallback = std::move(metaCb);
+        entry.magnetUri.clear(); // Not applicable
+        entry.savePath = path;
+        entry.displayName = displayName.empty() && params.ti ? params.ti->name() : displayName;
+        entry.state = TorrentState::Starting;
+        entry.createdAt = std::chrono::system_clock::now();
+        entry.lastStatsUpdate = std::chrono::steady_clock::now();
+
+        // Deliver metadata immediately because we already possess the full .torrent.
+        if (entry.metaCallback && params.ti && !entry.metadataDelivered.exchange(true)) {
+            Metadata m;
+            m.id = id;
+            m.name = params.ti->name();
+            m.totalBytes = params.ti->total_size();
+            m.pieceSize = params.ti->piece_length();
+            m.pieceCount = params.ti->num_pieces();
+            m.fileCount = params.ti->num_files();
+            m.creationDate = params.ti->creation_date();
+            m.isPrivate = params.ti->priv();
+            m.isV2 = params.ti->v2();
+
+            std::lock_guard cbLock(entry.callbackMutex);
+            entry.metaCallback(m);
+        }
+
+        return id;
+    }
+
+    int Manager::startFromTorrentFile(const std::string &torrentFilepath,
+                                      const std::string &path,
+                                      StatsCb cb,
+                                      MetadataCb metaCb,
+                                      const std::string &displayName)
+    {
+        if (torrentFilepath.empty() || path.empty() || !cb) {
+            return 0; // Invalid parameters
+        }
+
+        // Let libtorrent read and parse the .torrent straight from disk.
+        libtorrent::add_torrent_params params;
+        try {
+            params = libtorrent::load_torrent_file(torrentFilepath);
+        } catch (std::exception const &) {
+            return 0; // Could not parse file
+        }
+
+        params.save_path = path;
+
+        // ───────────────────────────── Session insertion ────────────────────────────
+        std::lock_guard lock(mtx_);
+        if (static_cast<int>(map_.size()) >= config_.maxTorrents) {
+            return 0;
+        }
+
+        int id = nextId_++;
+        libtorrent::error_code ec;
+        libtorrent::torrent_handle handle = ses_->add_torrent(params, ec);
+        if (ec || !handle.is_valid()) {
+            return 0;
+        }
+
+        auto [it, inserted] = map_.try_emplace(id);
+        if (!inserted) {
+            return 0;
+        }
+
+        Entry &entry = it->second;
+        entry.torrentHandle = std::move(handle);
+        entry.statsCallback = std::move(cb);
+        entry.metaCallback = std::move(metaCb);
+        entry.magnetUri.clear();
+        entry.savePath = path;
+        entry.displayName = displayName.empty() && params.ti ? params.ti->name() : displayName;
+        entry.state = TorrentState::Starting;
+        entry.createdAt = std::chrono::system_clock::now();
+        entry.lastStatsUpdate = std::chrono::steady_clock::now();
+
+        if (entry.metaCallback && params.ti && !entry.metadataDelivered.exchange(true)) {
+            Metadata m;
+            m.id = id;
+            m.name = params.ti->name();
+            m.totalBytes = params.ti->total_size();
+            m.pieceSize = params.ti->piece_length();
+            m.pieceCount = params.ti->num_pieces();
+            m.fileCount = params.ti->num_files();
+            m.creationDate = params.ti->creation_date();
+            m.isPrivate = params.ti->priv();
+            m.isV2 = params.ti->v2();
+
+            std::lock_guard cbLock(entry.callbackMutex);
+            entry.metaCallback(m);
+        }
+
+        return id;
+    }
+
 
     void Manager::pause(int id)
     {

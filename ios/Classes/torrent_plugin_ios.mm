@@ -89,6 +89,51 @@ int torrent_manager_start(TorrentManager* manager, const char* magnet, const cha
     return torrentId;
 }
 
+int torrent_manager_start_from_data(TorrentManager* manager, const char* data, int dataSize,
+                                   const char* path, const char* displayName,
+                                   StatsCallback statsCallback, MetadataCallback metadataCallback) {
+    if (!manager || !data || dataSize <= 0 || !path) return 0;
+    
+    std::vector<char> torrentData(data, data + dataSize);
+    std::string displayStr = displayName ? displayName : "";
+    
+    int torrentId = manager->manager->startFromTorrentData(
+        torrentData, path,
+        [manager](const tc::Stats& stats) { handleStats(manager, stats.id, stats); },
+        [manager](const tc::Metadata& metadata) { handleMetadata(manager, metadata.id, metadata); },
+        displayStr
+    );
+    
+    if (torrentId > 0) {
+        std::lock_guard<std::mutex> lock(manager->callbackMutex);
+        manager->callbacks[torrentId] = std::make_pair(statsCallback, metadataCallback);
+    }
+    
+    return torrentId;
+}
+
+int torrent_manager_start_from_file(TorrentManager* manager, const char* filePath,
+                                   const char* path, const char* displayName,
+                                   StatsCallback statsCallback, MetadataCallback metadataCallback) {
+    if (!manager || !filePath || !path) return 0;
+    
+    std::string displayStr = displayName ? displayName : "";
+    
+    int torrentId = manager->manager->startFromTorrentFile(
+        filePath, path,
+        [manager](const tc::Stats& stats) { handleStats(manager, stats.id, stats); },
+        [manager](const tc::Metadata& metadata) { handleMetadata(manager, metadata.id, metadata); },
+        displayStr
+    );
+    
+    if (torrentId > 0) {
+        std::lock_guard<std::mutex> lock(manager->callbackMutex);
+        manager->callbacks[torrentId] = std::make_pair(statsCallback, metadataCallback);
+    }
+    
+    return torrentId;
+}
+
 void torrent_manager_pause(TorrentManager* manager, int id) {
     if (manager) {
         manager->manager->pause(id);

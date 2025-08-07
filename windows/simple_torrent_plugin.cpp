@@ -230,6 +230,107 @@ void SimpleTorrentPlugin::HandleMethodCall(
       result->Error("FAILED", "Could not start torrent");
     }
   }
+  else if (method_name == "startFromTorrentData") {
+    const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGS", "Arguments must be a map");
+      return;
+    }
+    
+    auto data_it = arguments->find(flutter::EncodableValue("data"));
+    auto dest_it = arguments->find(flutter::EncodableValue("destination"));
+    
+    if (data_it == arguments->end() || dest_it == arguments->end()) {
+      result->Error("INVALID_ARGS", "data and destination are required");
+      return;
+    }
+    
+    const auto* data_vector = std::get_if<std::vector<uint8_t>>(&data_it->second);
+    const auto* destination = std::get_if<std::string>(&dest_it->second);
+    
+    if (!data_vector || !destination) {
+      result->Error("INVALID_ARGS", "data must be a byte array and destination must be a string");
+      return;
+    }
+    
+    std::string display_name;
+    auto name_it = arguments->find(flutter::EncodableValue("displayName"));
+    if (name_it != arguments->end()) {
+      if (const auto* name = std::get_if<std::string>(&name_it->second)) {
+        display_name = *name;
+      }
+    }
+    
+    auto stats_callback = [this](const tc::Stats& stats) {
+      SendStatsEvent(stats);
+    };
+    
+    auto metadata_callback = [this](const tc::Metadata& metadata) {
+      SendMetadataEvent(metadata);
+    };
+    
+    // Convert uint8_t vector to char vector for the core API
+    std::vector<char> torrent_data(data_vector->begin(), data_vector->end());
+    
+    int torrent_id = manager_->startFromTorrentData(torrent_data, *destination, stats_callback, metadata_callback, display_name);
+    
+    if (torrent_id > 0) {
+      std::lock_guard<std::mutex> lock(callbacks_mutex_);
+      callbacks_[torrent_id] = std::make_pair(stats_callback, metadata_callback);
+      result->Success(flutter::EncodableValue(torrent_id));
+    } else {
+      result->Error("FAILED", "Could not start torrent from data");
+    }
+  }
+  else if (method_name == "startFromTorrentFile") {
+    const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGS", "Arguments must be a map");
+      return;
+    }
+    
+    auto file_path_it = arguments->find(flutter::EncodableValue("torrentFilePath"));
+    auto dest_it = arguments->find(flutter::EncodableValue("destination"));
+    
+    if (file_path_it == arguments->end() || dest_it == arguments->end()) {
+      result->Error("INVALID_ARGS", "torrentFilePath and destination are required");
+      return;
+    }
+    
+    const auto* torrent_file_path = std::get_if<std::string>(&file_path_it->second);
+    const auto* destination = std::get_if<std::string>(&dest_it->second);
+    
+    if (!torrent_file_path || !destination) {
+      result->Error("INVALID_ARGS", "torrentFilePath and destination must be strings");
+      return;
+    }
+    
+    std::string display_name;
+    auto name_it = arguments->find(flutter::EncodableValue("displayName"));
+    if (name_it != arguments->end()) {
+      if (const auto* name = std::get_if<std::string>(&name_it->second)) {
+        display_name = *name;
+      }
+    }
+    
+    auto stats_callback = [this](const tc::Stats& stats) {
+      SendStatsEvent(stats);
+    };
+    
+    auto metadata_callback = [this](const tc::Metadata& metadata) {
+      SendMetadataEvent(metadata);
+    };
+    
+    int torrent_id = manager_->startFromTorrentFile(*torrent_file_path, *destination, stats_callback, metadata_callback, display_name);
+    
+    if (torrent_id > 0) {
+      std::lock_guard<std::mutex> lock(callbacks_mutex_);
+      callbacks_[torrent_id] = std::make_pair(stats_callback, metadata_callback);
+      result->Success(flutter::EncodableValue(torrent_id));
+    } else {
+      result->Error("FAILED", "Could not start torrent from file");
+    }
+  }
   else if (method_name == "pause") {
     const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
     if (!arguments) {

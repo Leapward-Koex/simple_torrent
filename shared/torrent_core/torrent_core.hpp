@@ -83,6 +83,14 @@ namespace tc
         // returns 0 on failure
         int start(const std::string &magnet, const std::string &path,
                   StatsCb cb, MetadataCb metaCb, const std::string &displayName = "");
+        
+        int startFromTorrentFile(const std::string &torrentFilePath, const std::string &path,
+                                StatsCb cb, MetadataCb metaCb, const std::string &displayName = "");
+
+        // Start from .torrent file data
+        int startFromTorrentData(const std::vector<char> &torrentData, const std::string &path,
+                                StatsCb cb, MetadataCb metaCb, const std::string &displayName = "");
+        
         void pause(int id);
         void resume(int id);
         void cancel(int id);

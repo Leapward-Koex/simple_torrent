@@ -195,6 +195,31 @@ Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_startT
     return g_mgr->start(jstr(e, jMag), jstr(e, jPath), statsToJava, metadataToJava, jstr(e, jName));
 }
 
+extern "C" JNIEXPORT jint JNICALL
+Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_startTorrentFromData(JNIEnv *e, jobject, jbyteArray jData, jstring jPath, jstring jName)
+{
+    // Convert byte array to std::vector<char>
+    jsize dataLen = e->GetArrayLength(jData);
+    jbyte* dataBytes = e->GetByteArrayElements(jData, nullptr);
+    
+    std::vector<char> torrentData(dataBytes, dataBytes + dataLen);
+    
+    // Release the byte array
+    e->ReleaseByteArrayElements(jData, dataBytes, JNI_ABORT);
+    
+    std::string displayName = (jName != nullptr) ? jstr(e, jName) : "";
+    
+    return g_mgr->startFromTorrentData(torrentData, jstr(e, jPath), statsToJava, metadataToJava, displayName);
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_startTorrentFromFile(JNIEnv *e, jobject, jstring jFilePath, jstring jPath, jstring jName)
+{
+    std::string displayName = (jName != nullptr) ? jstr(e, jName) : "";
+    
+    return g_mgr->startFromTorrentFile(jstr(e, jFilePath), jstr(e, jPath), statsToJava, metadataToJava, displayName);
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_leapwardkoex_simple_1torrent_simple_1torrent_SimpleTorrentPlugin_pauseTorrent(JNIEnv *, jobject, jint id)
 {

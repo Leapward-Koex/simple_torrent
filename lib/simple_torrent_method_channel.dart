@@ -9,17 +9,17 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   static const _metaData = EventChannel('simple_torrent/metadata');
   static const Duration _methodTimeout = Duration(seconds: 15);
 
-  late final Stream<TorrentStats> _stats$ = _events.receiveBroadcastStream().map((e) => TorrentStats.fromMap(e as Map<dynamic, dynamic>));
-  late final Stream<TorrentMetadata> _metaData$ = _metaData.receiveBroadcastStream().map(
-    (e) => TorrentMetadata.fromMap(e as Map<dynamic, dynamic>),
-  );
+  late final Stream<TorrentStats> _stats$ = _events
+      .receiveBroadcastStream()
+      .map((e) => TorrentStats.fromMap(e as Map<dynamic, dynamic>));
+  late final Stream<TorrentMetadata> _metaData$ = _metaData
+      .receiveBroadcastStream()
+      .map((e) => TorrentMetadata.fromMap(e as Map<dynamic, dynamic>));
 
   @override
   Future<void> init({TorrentConfig? config}) async {
     return _methods
-        .invokeMethod('init', {
-          if (config != null) 'config': config.toMap(),
-        })
+        .invokeMethod('init', {if (config != null) 'config': config.toMap()})
         .timeout(_methodTimeout);
   }
 
@@ -31,10 +31,18 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   }
 
   @override
-  Future<int> start({required String magnet, required String path, String? displayName}) async {
+  Future<int> start({
+    required String magnet,
+    required String path,
+    String? displayName,
+  }) async {
     try {
       final result = await _methods
-          .invokeMethod<int>('start', {'magnet': magnet, 'destination': path, if (displayName != null) 'displayName': displayName})
+          .invokeMethod<int>('start', {
+            'magnet': magnet,
+            'destination': path,
+            if (displayName != null) 'displayName': displayName,
+          })
           .timeout(_methodTimeout);
       return result ?? 0;
     } on TimeoutException {
@@ -43,21 +51,67 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   }
 
   @override
-  Future<void> pause(int id) => _methods.invokeMethod('pause', {'id': id}).timeout(_methodTimeout);
+  Future<int> startFromTorrentData({
+    required Uint8List data,
+    required String path,
+    String? displayName,
+  }) async {
+    try {
+      final result = await _methods
+          .invokeMethod<int>('startFromTorrentData', {
+            'data': data,
+            'destination': path,
+            if (displayName != null) 'displayName': displayName,
+          })
+          .timeout(_methodTimeout);
+      return result ?? 0;
+    } on TimeoutException {
+      throw Exception('Torrent start from data operation timed out');
+    }
+  }
 
   @override
-  Future<void> resume(int id) => _methods.invokeMethod('resume', {'id': id}).timeout(_methodTimeout);
+  Future<int> startFromTorrentFile({
+    required String torrentFilePath,
+    required String path,
+    String? displayName,
+  }) async {
+    try {
+      final result = await _methods
+          .invokeMethod<int>('startFromTorrentFile', {
+            'torrentFilePath': torrentFilePath,
+            'destination': path,
+            if (displayName != null) 'displayName': displayName,
+          })
+          .timeout(_methodTimeout);
+      return result ?? 0;
+    } on TimeoutException {
+      throw Exception('Torrent start from file operation timed out');
+    }
+  }
 
   @override
-  Future<void> cancel(int id) => _methods.invokeMethod('cancel', {'id': id}).timeout(_methodTimeout);
+  Future<void> pause(int id) =>
+      _methods.invokeMethod('pause', {'id': id}).timeout(_methodTimeout);
 
   @override
-  Future<void> finalise(int id) => _methods.invokeMethod('finalise', {'id': id}).timeout(_methodTimeout);
+  Future<void> resume(int id) =>
+      _methods.invokeMethod('resume', {'id': id}).timeout(_methodTimeout);
+
+  @override
+  Future<void> cancel(int id) =>
+      _methods.invokeMethod('cancel', {'id': id}).timeout(_methodTimeout);
+
+  @override
+  Future<void> finalise(int id) =>
+      _methods.invokeMethod('finalise', {'id': id}).timeout(_methodTimeout);
 
   @override
   Future<List<int>> getActiveTorrentIds() async {
     try {
-      final result = await _methods.invokeMethod<List<dynamic>>('getActiveTorrentIds');
+      final result = await _methods.invokeMethod<List<dynamic>>(
+        'getActiveTorrentIds',
+      );
       return result?.cast<int>() ?? [];
     } catch (e) {
       throw Exception('Failed to get active torrent IDs: $e');
@@ -77,7 +131,9 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   @override
   Future<TorrentState> getState(int id) async {
     try {
-      final result = await _methods.invokeMethod<String>('getState', {'id': id});
+      final result = await _methods.invokeMethod<String>('getState', {
+        'id': id,
+      });
       return TorrentStateExtension.fromString(result ?? 'error');
     } catch (e) {
       throw Exception('Failed to get torrent state: $e');
@@ -87,7 +143,10 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   @override
   Future<TorrentInfo> getTorrentInfo(int id) async {
     try {
-      final result = await _methods.invokeMethod<Map<dynamic, dynamic>>('getTorrentInfo', {'id': id});
+      final result = await _methods.invokeMethod<Map<dynamic, dynamic>>(
+        'getTorrentInfo',
+        {'id': id},
+      );
       if (result == null) {
         throw Exception('Torrent not found');
       }
@@ -100,7 +159,9 @@ class MethodChannelSimpleTorrent extends SimpleTorrentPlatform {
   @override
   Future<String> getLastError(int id) async {
     try {
-      final result = await _methods.invokeMethod<String>('getLastError', {'id': id});
+      final result = await _methods.invokeMethod<String>('getLastError', {
+        'id': id,
+      });
       return result ?? 'Unknown error';
     } catch (e) {
       throw Exception('Failed to get last error: $e');
