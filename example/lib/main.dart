@@ -1,12 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:simple_torrent/simple_torrent.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'dart:typed_data';
+import 'dart:async';
 import 'dart:io';
 
-void main() {
-  runApp(const MyApp());
-}
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:simple_torrent/simple_torrent.dart';
+
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -19,398 +18,343 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const TorrentManagerPage(),
+      home: const SimpleDemoPage(),
     );
   }
 }
 
-class TorrentManagerPage extends StatefulWidget {
-  const TorrentManagerPage({super.key});
+class SimpleDemoPage extends StatefulWidget {
+  const SimpleDemoPage({super.key});
 
   @override
-  State<TorrentManagerPage> createState() => _TorrentManagerPageState();
+  State<SimpleDemoPage> createState() => _SimpleDemoPageState();
 }
 
-class _TorrentManagerPageState extends State<TorrentManagerPage> {
-  final _magnetController = TextEditingController(
-    text:
-        'magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent',
-  );
+class _SimpleDemoPageState extends State<SimpleDemoPage> {
+  static const _bbbMagnet =
+      'magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent';
+
   final _pathController = TextEditingController(
     text: '/storage/emulated/0/Download',
   );
-  final _nameController = TextEditingController();
+  bool _initialised = false;
 
-  List<TorrentInfo> _torrents = [];
+  // Live data
   final Map<int, TorrentStats> _stats = {};
-  bool _initialized = false;
+  final Map<int, TorrentInfo> _infos = {};
+  StreamSubscription<TorrentStats>? _statsSub;
+  StreamSubscription<TorrentMetadata>? _metaSub;
 
   @override
   void initState() {
     super.initState();
-    _initializeTorrentManager();
-    _listenToStats();
+    _init();
   }
 
-  Future<void> _initializeTorrentManager() async {
+  Future<void> _init() async {
     try {
-      // Initialize with custom configuration
       await SimpleTorrent.init(
         config: const TorrentConfig(
-          maxTorrents: 10,
-          maxDownloadRate: 1024, // 1 MB/s
-          maxUploadRate: 512, // 512 KB/s
+          maxTorrents: 3,
           enableDHT: true,
-          userAgent: 'MyTorrentApp/1.0',
+          userAgent: 'SimpleTorrentDemo/1.0',
         ),
       );
-
-      // Load existing torrents
-      await _refreshTorrents();
-
-      setState(() {
-        _initialized = true;
-      });
+      await _loadActive();
+      _listenStreams();
+      setState(() => _initialised = true);
     } catch (e) {
-      _showError('Failed to initialize: $e');
+      _show('Init failed: $e', isError: true);
     }
   }
 
-  void _listenToStats() {
-    SimpleTorrent.statsStream.listen((stats) {
-      print(
-        '📊 Stats update - ID: ${stats.id}, State: ${stats.state.name}, Progress: ${(stats.progress * 100).toStringAsFixed(1)}%',
-      );
+  void _listenStreams() {
+    _statsSub?.cancel();
+    _metaSub?.cancel();
+    _statsSub = SimpleTorrent.statsStream.listen((s) {
+      if (!mounted) return;
       setState(() {
-        _stats[stats.id] = stats;
+        _stats[s.id] = s;
       });
     });
-
-    SimpleTorrent.metadataStream.listen((metadata) {
-      print('📝 Metadata update - ID: ${metadata.id}, Name: ${metadata.name}');
+    _metaSub = SimpleTorrent.metadataStream.listen((m) {
+      // Optionally react to metadata; not required for this demo UI
     });
   }
 
-  Future<void> _refreshTorrents() async {
+  Future<void> _loadActive() async {
     try {
-      final torrents = await SimpleTorrentHelpers.getAllTorrents();
-      setState(() {
-        _torrents = torrents;
-      });
+      final ids = await SimpleTorrent.getActiveTorrentIds();
+      final Map<int, TorrentInfo> nextInfos = {};
+      for (final id in ids) {
+        try {
+          final info = await SimpleTorrent.getTorrentInfo(id);
+          nextInfos[id] = info;
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _infos
+            ..clear()
+            ..addAll(nextInfos);
+        });
+      }
     } catch (e) {
-      _showError('Failed to refresh torrents: $e');
+      _show('Failed to load active torrents: $e', isError: true);
     }
   }
 
-  Future<void> _addTorrent() async {
-    if (_magnetController.text.isEmpty || _pathController.text.isEmpty) {
-      _showError('Please fill in magnet and path');
-      return;
-    }
+  String get _downloadPath =>
+      _pathController.text.isEmpty
+          ? '/storage/emulated/0/Download'
+          : _pathController.text;
 
+  Future<void> _startMagnet() async {
     try {
       final id = await SimpleTorrent.start(
-        magnet: _magnetController.text,
-        path: _pathController.text,
-        displayName: _nameController.text.isEmpty ? null : _nameController.text,
+        magnet: _bbbMagnet,
+        path: _downloadPath,
+        displayName: 'Big Buck Bunny (magnet)',
       );
-
-      _magnetController.clear();
-      _nameController.clear();
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Torrent started with ID: $id')));
-
-      await _refreshTorrents();
+      await _loadActive();
+      _show('Started magnet, id=$id');
     } catch (e) {
-      _showError('Failed to start torrent: $e');
+      _show('Failed: $e', isError: true);
     }
   }
 
-  /// Adds the bundled demo torrent (.torrent file) located in assets.
-  Future<void> _addDataAssetTorrent() async {
+  Future<void> _startFromData() async {
     try {
-      final byteData = await rootBundle.load('assets/big-buck-bunny.torrent');
+      final data = await rootBundle.load('assets/big-buck-bunny.torrent');
       final id = await SimpleTorrent.startFromData(
-        data: byteData.buffer.asUint8List(),
-        downloadPath:
-            _pathController.text.isEmpty
-                ? '/storage/emulated/0/Download'
-                : _pathController.text,
-        displayName: 'Big Buck Bunny (from data demo)',
+        data: data.buffer.asUint8List(),
+        downloadPath: _downloadPath,
+        displayName: 'Big Buck Bunny (.torrent data)',
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Demo torrent started with ID: $id')),
-      );
+      await _loadActive();
+      _show('Started from data, id=$id');
     } catch (e) {
-      _showError('Failed to start demo torrent: $e');
+      _show('Failed: $e', isError: true);
     }
   }
 
-  Future<void> _addFileAssetTorrent() async {
+  Future<void> _startFromFile() async {
     try {
-      // Load asset bytes
-      final byteData = await rootBundle.load('assets/big-buck-bunny.torrent');
-      // Write to a temporary file
-      final tempDir = await Directory.systemTemp.createTemp('torrent_');
-      final filePath = '${tempDir.path}/big-buck-bunny.torrent';
-      final file = File(filePath);
-      await file.writeAsBytes(byteData.buffer.asUint8List());
+      final data = await rootBundle.load('assets/big-buck-bunny.torrent');
+      final dir = await Directory.systemTemp.createTemp('torrent_');
+      final file = File('${dir.path}/big-buck-bunny.torrent');
+      await file.writeAsBytes(data.buffer.asUint8List());
 
-      // Start torrent from file
       final id = await SimpleTorrent.startFromTorrentFile(
-        torrentFilePath: filePath,
-        downloadPath:
-            _pathController.text.isEmpty
-                ? '/storage/emulated/0/Download'
-                : _pathController.text,
-        displayName: 'Big Buck Bunny (from file demo)',
+        torrentFilePath: file.path,
+        downloadPath: _downloadPath,
+        displayName: 'Big Buck Bunny (.torrent file)',
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Demo torrent started with ID: $id')),
-      );
+      await _loadActive();
+      _show('Started from file, id=$id');
     } catch (e) {
-      _showError('Failed to start demo torrent from file: $e');
+      _show('Failed: $e', isError: true);
     }
   }
 
-  void _showError(String message) {
+  Future<void> _pause(int id) async {
+    try {
+      await SimpleTorrent.pause(id);
+      await _loadActive();
+    } catch (e) {
+      _show('Pause failed: $e', isError: true);
+    }
+  }
+
+  Future<void> _resume(int id) async {
+    try {
+      await SimpleTorrent.resume(id);
+      await _loadActive();
+    } catch (e) {
+      _show('Resume failed: $e', isError: true);
+    }
+  }
+
+  Future<void> _cancel(int id) async {
+    try {
+      await SimpleTorrent.cancel(id);
+      await _loadActive();
+    } catch (e) {
+      _show('Cancel failed: $e', isError: true);
+    }
+  }
+
+  Future<void> _finalise(int id) async {
+    try {
+      await SimpleTorrent.finalise(id);
+      await _loadActive();
+    } catch (e) {
+      _show('Finalise failed: $e', isError: true);
+    }
+  }
+
+  void _show(String msg, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red : null,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final items = _infos.keys.toList()..sort();
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Torrent Manager'),
+        title: const Text('Simple Torrent Demo'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshTorrents,
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) async {
-              switch (value) {
-                case 'pauseAll':
-                  await SimpleTorrentHelpers.pauseAll();
-                  await _refreshTorrents();
-                  break;
-                case 'resumeAll':
-                  await SimpleTorrentHelpers.resumeAll();
-                  await _refreshTorrents();
-                  break;
-                case 'addDataAsset':
-                  await _addDataAssetTorrent();
-                  await _refreshTorrents();
-                  break;
-                case 'addFileAsset':
-                  await _addFileAssetTorrent();
-                  await _refreshTorrents();
-                  break;
-              }
-            },
-            itemBuilder:
-                (context) => [
-                  const PopupMenuItem(
-                    value: 'pauseAll',
-                    child: Text('Pause All'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'resumeAll',
-                    child: Text('Resume All'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'addDataAsset',
-                    child: Text('Add Demo Torrent (data)'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'addFileAsset',
-                    child: Text('Add Demo Torrent (file)'),
-                  ),
-                ],
-          ),
+          IconButton(onPressed: _loadActive, icon: const Icon(Icons.refresh)),
         ],
       ),
-      body: _initialized ? _buildBody() : _buildLoading(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTorrentDialog,
-        tooltip: 'Add Torrent',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildLoading() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Initializing torrent manager...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_torrents.isEmpty) {
-      return const Center(
-        child: Text(
-          'No torrents active.\nTap + to add a torrent.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: _torrents.length,
-      itemBuilder: (context, index) {
-        final torrent = _torrents[index];
-        final stats = _stats[torrent.id];
-
-        return Card(
-          margin: const EdgeInsets.all(8),
-          child: ListTile(
-            title: Text(torrent.displayName),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Torrent State: ${torrent.state.name}'),
-                if (stats != null) Text('Stats State: ${stats.state.name}'),
-                if (stats != null) Text('Progress: ${stats.progress * 100}%'),
-                if (stats != null)
-                  Text(
-                    'Speed: ↓${_formatBytes(stats.dlRate)}/s ↑${_formatBytes(stats.ulRate)}/s',
-                  ),
-                if (stats != null)
-                  Text('Peers: ${stats.peers} (${stats.seeds} seeds)'),
-                if (torrent.lastError.isNotEmpty)
-                  Text(
-                    'Error: ${torrent.lastError}',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-              ],
-            ),
-            leading: _buildStateIcon(torrent.state),
-            trailing: PopupMenuButton<String>(
-              onSelected: (value) async {
-                switch (value) {
-                  case 'pause':
-                    await torrent.pause();
-                    break;
-                  case 'resume':
-                    await torrent.resume();
-                    break;
-                  case 'cancel':
-                    await torrent.cancel();
-                    break;
-                  case 'finalise':
-                    await torrent.finalise();
-                    break;
-                }
-                await _refreshTorrents();
-              },
-              itemBuilder:
-                  (context) => [
-                    const PopupMenuItem(value: 'pause', child: Text('Pause')),
-                    const PopupMenuItem(value: 'resume', child: Text('Resume')),
-                    const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
-                    const PopupMenuItem(
-                      value: 'finalise',
-                      child: Text('Finalise'),
+      body:
+          _initialised
+              ? Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _pathController,
+                      decoration: const InputDecoration(
+                        labelText: 'Download path',
+                        hintText: '/storage/emulated/0/Download',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _startMagnet,
+                            child: const Text('Magnet'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _startFromData,
+                            child: const Text('.torrent data'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _startFromFile,
+                            child: const Text('.torrent file'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    Expanded(
+                      child:
+                          items.isEmpty
+                              ? const Center(child: Text('No active torrents'))
+                              : ListView.builder(
+                                itemCount: items.length,
+                                itemBuilder: (context, index) {
+                                  final id = items[index];
+                                  final info = _infos[id]!;
+                                  final s = _stats[id];
+                                  final state = (s?.state ?? info.state).name;
+                                  final progress = s?.progress ?? 0.0;
+                                  return Card(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Text(
+                                            info.displayName.isNotEmpty
+                                                ? info.displayName
+                                                : 'Torrent $id',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text('State: $state'),
+                                          Text(
+                                            'Progress: ${(progress * 100).toStringAsFixed(1)}%',
+                                          ),
+                                          const SizedBox(height: 6),
+                                          LinearProgressIndicator(
+                                            value:
+                                                progress
+                                                    .clamp(0.0, 1.0)
+                                                    .toDouble(),
+                                          ),
+                                          if (s != null) ...[
+                                            Text(
+                                              'Speed: ↓${_fmtBytes(s.dlRate)}/s ↑${_fmtBytes(s.ulRate)}/s',
+                                            ),
+                                            Text(
+                                              'Pieces: ${s.pieces}/${s.piecesTotal}',
+                                            ),
+                                            Text(
+                                              'Peers: ${s.peers} (seeds: ${s.seeds})',
+                                            ),
+                                          ],
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              TextButton(
+                                                onPressed: () => _pause(id),
+                                                child: const Text('Pause'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () => _resume(id),
+                                                child: const Text('Resume'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () => _cancel(id),
+                                                child: const Text('Cancel'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () => _finalise(id),
+                                                child: const Text('Finalise'),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                     ),
                   ],
-            ),
-          ),
-        );
-      },
+                ),
+              )
+              : const Center(child: CircularProgressIndicator()),
     );
   }
 
-  Widget _buildStateIcon(TorrentState state) {
-    switch (state) {
-      case TorrentState.starting:
-        return const Icon(Icons.hourglass_empty, color: Colors.orange);
-      case TorrentState.downloadingMetadata:
-        return const Icon(Icons.info, color: Colors.blue);
-      case TorrentState.downloading:
-        return const Icon(Icons.download, color: Colors.green);
-      case TorrentState.seeding:
-        return const Icon(Icons.upload, color: Colors.purple);
-      case TorrentState.paused:
-        return const Icon(Icons.pause, color: Colors.grey);
-      case TorrentState.error:
-        return const Icon(Icons.error, color: Colors.red);
-      case TorrentState.stopped:
-        return const Icon(Icons.stop, color: Colors.black);
-    }
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
-  }
-
-  void _showAddTorrentDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Add Torrent'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _magnetController,
-                  decoration: const InputDecoration(
-                    labelText: 'Magnet URI',
-                    hintText: 'magnet:?xt=urn:btih:...',
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _pathController,
-                  decoration: const InputDecoration(labelText: 'Download Path'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Display Name (optional)',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _addTorrent();
-                },
-                child: const Text('Add'),
-              ),
-            ],
-          ),
-    );
+  String _fmtBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   @override
   void dispose() {
-    _magnetController.dispose();
+    _statsSub?.cancel();
+    _metaSub?.cancel();
     _pathController.dispose();
-    _nameController.dispose();
     super.dispose();
   }
 }
