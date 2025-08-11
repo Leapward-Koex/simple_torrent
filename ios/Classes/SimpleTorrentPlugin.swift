@@ -12,10 +12,13 @@ func torrent_manager_destroy(_ manager: UnsafeMutableRawPointer)
 func torrent_manager_apply_config(_ manager: UnsafeMutableRawPointer, _ maxTorrents: Int32, _ maxDownloadRate: Int32, _ maxUploadRate: Int32, _ enableDHT: Bool, _ userAgent: UnsafePointer<CChar>?)
 
 @_silgen_name("torrent_manager_start")
-func torrent_manager_start(_ manager: UnsafeMutableRawPointer, _ magnet: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
+func torrent_manager_start(_ manager: UnsafeMutableRawPointer, _ magnet: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
 
 @_silgen_name("torrent_manager_start_from_data")
-func torrent_manager_start_from_data(_ manager: UnsafeMutableRawPointer, _ data: UnsafePointer<CChar>, _ dataSize: Int32, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
+func torrent_manager_start_from_data(_ manager: UnsafeMutableRawPointer, _ data: UnsafePointer<CChar>, _ dataSize: Int32, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
+
+@_silgen_name("torrent_manager_start_from_file")
+func torrent_manager_start_from_file(_ manager: UnsafeMutableRawPointer, _ filePath: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
 
 @_silgen_name("torrent_manager_start_from_file")
 func torrent_manager_start_from_file(_ manager: UnsafeMutableRawPointer, _ filePath: UnsafePointer<CChar>, _ path: UnsafePointer<CChar>, _ displayName: UnsafePointer<CChar>?, _ statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void, _ metadataCallback: @convention(c) (Int32, UnsafePointer<CChar>, Int64, Int32, Int32, Int32, Int64, Bool, Bool) -> Void) -> Int32
@@ -211,10 +214,10 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         
         let displayName = args["displayName"] as? String
         
-        let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, phase, state in
+    let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, state in
             DispatchQueue.main.async {
                 if let instance = SimpleTorrentPlugin.sharedInstance {
-                    instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), phase: String(cString: phase), state: String(cString: state))
+            instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), state: String(cString: state))
                 }
             }
         }
@@ -256,10 +259,10 @@ public class SimpleTorrentPlugin: NSObject, FlutterPlugin {
         
         let displayName = args["displayName"] as? String
         
-        let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, phase, state in
+    let statsCallback: @convention(c) (Int32, Int32, Int32, Int32, Int32, Float, Int32, Int32, UnsafePointer<CChar>) -> Void = { id, dlRate, ulRate, pieces, piecesTotal, progress, seeds, peers, state in
             DispatchQueue.main.async {
                 if let instance = SimpleTorrentPlugin.sharedInstance {
-                    instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), phase: String(cString: phase), state: String(cString: state))
+            instance.sendStats(id: Int(id), dlRate: Int(dlRate), ulRate: Int(ulRate), pieces: Int(pieces), piecesTotal: Int(piecesTotal), progress: progress, seeds: Int(seeds), peers: Int(peers), state: String(cString: state))
                 }
             }
         }

@@ -193,7 +193,6 @@ class TorrentStats {
   final double progress;     // Progress (0.0-1.0)
   final int seeds;           // Number of seeds
   final int peers;           // Number of peers
-  final String phase;        // Current phase
   final TorrentState? state; // Current state
 }
 ```
@@ -310,7 +309,7 @@ class _TorrentDownloaderState extends State<TorrentDownloader> {
           final stats = _stats.values.elementAt(index);
           return ListTile(
             title: Text('Torrent ${stats.id}'),
-            subtitle: Text('${(stats.progress * 100).toStringAsFixed(1)}% - ${stats.phase}'),
+            subtitle: Text('${(stats.progress * 100).toStringAsFixed(1)}% - ${stats.state.name}'),
             trailing: Text('${_formatSpeed(stats.downloadRate)}'),
           );
         },

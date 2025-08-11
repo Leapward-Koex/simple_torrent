@@ -434,7 +434,6 @@ class SimpleTorrentPlugin : FlutterPlugin,
                             "progress" to 1.0f,
                             "seeds" to 0,
                             "peers" to 0,
-                            "phase" to "completed",
                             "state" to "completed"
                         )
                         sendStats(completionStats)
