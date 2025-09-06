@@ -1,6 +1,6 @@
 name: simple_torrent
-description: "A new Flutter plugin project."
-version: 0.0.1
+description: "A basic torrent library for Flutter using libtorrent."
+version: 1.0.0
 homepage:
 
 environment:
