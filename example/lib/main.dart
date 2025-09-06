@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:file_picker/file_picker.dart';
 import 'package:simple_torrent/simple_torrent.dart';
 
 void main() => runApp(const MyApp());
@@ -35,7 +36,14 @@ class _SimpleDemoPageState extends State<SimpleDemoPage> {
       'magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent';
 
   final _pathController = TextEditingController(
-    text: '/storage/emulated/0/Download',
+    text:
+        Platform.isAndroid
+            ? '/storage/emulated/0/Download'
+            : Platform.isIOS
+            ? 'Documents'
+            : Platform.isMacOS
+            ? Platform.environment['HOME']! + '/Downloads'
+            : '/tmp',
   );
   bool _initialised = false;
 
@@ -108,6 +116,19 @@ class _SimpleDemoPageState extends State<SimpleDemoPage> {
       _pathController.text.isEmpty
           ? '/storage/emulated/0/Download'
           : _pathController.text;
+
+  Future<void> _pickDirectory() async {
+    try {
+      final result = await FilePicker.platform.getDirectoryPath();
+      if (result != null) {
+        setState(() {
+          _pathController.text = result;
+        });
+      }
+    } catch (e) {
+      _show('Failed to pick directory: $e', isError: true);
+    }
+  }
 
   Future<void> _startMagnet() async {
     try {
@@ -220,12 +241,25 @@ class _SimpleDemoPageState extends State<SimpleDemoPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextField(
-                      controller: _pathController,
-                      decoration: const InputDecoration(
-                        labelText: 'Download path',
-                        hintText: '/storage/emulated/0/Download',
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _pathController,
+                            decoration: const InputDecoration(
+                              labelText: 'Download path',
+                              hintText: 'Select a directory for downloads',
+                            ),
+                            readOnly: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: _pickDirectory,
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('Browse'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     Row(
