@@ -51,6 +51,80 @@ void main() async {
 }
 ```
 
+## Platform Setup
+
+### macOS Setup
+
+For macOS applications using this plugin, **only user-selected directories are supported** due to sandboxing requirements. You must implement a directory picker to allow users to choose where torrents will be downloaded.
+
+#### Required Entitlements
+
+Add the following entitlements to your macOS app's entitlements files:
+
+**macos/Runner/DebugProfile.entitlements:**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.network.server</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>
+```
+
+**macos/Runner/Release.entitlements:**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.network.server</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>
+```
+
+#### Key Entitlements Explained
+
+- **com.apple.security.network.client**: Allows outbound network connections for torrent downloading
+- **com.apple.security.network.server**: Allows inbound connections for peer-to-peer communication
+- **com.apple.security.files.user-selected.read-write**: Allows access to directories chosen by the user via file picker
+
+#### Required Implementation Pattern
+
+**You must use a file picker for directory selection**. Hardcoded paths will not work due to macOS sandboxing. Here's the required approach:
+
+**Implement Directory Picker**: Use `file_picker` package to let users select download directories:
+   ```dart
+   import 'package:file_picker/file_picker.dart';
+   
+   Future<String?> selectDownloadDirectory() async {
+     return await FilePicker.platform.getDirectoryPath();
+   }
+   ```
+
+#### Troubleshooting
+
+- **Downloads fail with permission errors**: Ensure you're using user-selected directories only, not hardcoded paths
+- **"Operation not permitted" errors**: The directory was not selected by the user - implement proper directory picker
+- **Peer connections fail**: Verify both network entitlements are included
+- **Build errors**: Check that entitlements files are properly formatted XML and included in your Xcode project
+
 ## API Reference
 
 ### Configuration
