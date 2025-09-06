@@ -6,6 +6,7 @@
 #include <libtorrent/settings_pack.hpp>
 #include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/load_torrent.hpp>
+#include <libtorrent/hex.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -18,11 +19,20 @@ namespace tc
     // ───────────────────────────────── Manager ctor / dtor ────────────
     Manager::Manager(const ManagerConfig &config) : config_(config)
     {
+        printf("[TorrentCore] Initializing session with config:\n");
+        printf("  - DHT enabled: %s\n", config_.enableDHT ? "true" : "false");
+        printf("  - Max download rate: %d KB/s\n", config_.maxDownloadRate);
+        printf("  - Max upload rate: %d KB/s\n", config_.maxUploadRate);
+        printf("  - User agent: %s\n", config_.userAgent.c_str());
+
         settings_pack sp;
         sp.set_int(settings_pack::alert_mask,
                    alert::status_notification |
                        alert::error_notification |
-                       alert::storage_notification);
+                       alert::storage_notification |
+                       alert::tracker_notification |
+                       alert::peer_notification |
+                       alert::dht_notification);
 
         if (config_.maxDownloadRate > 0)
         {
@@ -36,19 +46,39 @@ namespace tc
         sp.set_bool(settings_pack::enable_dht, config_.enableDHT);
         sp.set_str(settings_pack::user_agent, config_.userAgent);
 
+        // Add more network settings for better connectivity
+        sp.set_bool(settings_pack::enable_lsd, true);  // Local Service Discovery
+        sp.set_bool(settings_pack::enable_upnp, true); // UPnP port mapping
+        sp.set_bool(settings_pack::enable_natpmp, true); // NAT-PMP port mapping
+        sp.set_int(settings_pack::connections_limit, 200);
+        
+        // DHT settings
+        if (config_.enableDHT) {
+            sp.set_int(settings_pack::dht_announce_interval, 15 * 60); // 15 minutes
+            sp.set_str(settings_pack::dht_bootstrap_nodes, 
+                      "router.bittorrent.com:6881,"
+                      "dht.transmissionbt.com:6881,"
+                      "router.utorrent.com:6881");
+        }
+
+        printf("[TorrentCore] Creating libtorrent session...\n");
         ses_ = std::make_unique<session>(sp);
+        printf("[TorrentCore] Session created successfully\n");
 
         // Start single background thread for all torrents
         pollThread_ = std::thread(&Manager::pollAll, this);
+        printf("[TorrentCore] Background polling thread started\n");
     }
 
     Manager::~Manager()
     {
+        printf("[TorrentCore] Shutting down manager...\n");
         shouldStop_ = true;
         if (pollThread_.joinable())
         {
             pollThread_.join();
         }
+        printf("[TorrentCore] Manager shutdown complete\n");
     }
 
     // ──────────────────────────────────────────── Public API ──────────
@@ -58,14 +88,22 @@ namespace tc
                        MetadataCb metaCb,
                        const std::string &displayName)
     {
+        printf("[TorrentCore] Starting torrent:\n");
+        printf("  - Magnet: %s\n", magnet.c_str());
+        printf("  - Save path: %s\n", path.c_str());
+        printf("  - Display name: %s\n", displayName.c_str());
+        
         if (magnet.empty() || path.empty() || !cb)
         {
+            printf("[TorrentCore] ERROR: Invalid parameters\n");
             return 0; // Invalid parameters
         }
 
         std::lock_guard lock(mtx_);
         if (static_cast<int>(map_.size()) >= config_.maxTorrents)
         {
+            printf("[TorrentCore] ERROR: Too many torrents (%d >= %d)\n", 
+                   static_cast<int>(map_.size()), config_.maxTorrents);
             return 0; // Too many torrents
         }
 
@@ -76,20 +114,36 @@ namespace tc
         parse_magnet_uri(magnet, params, ec);
         if (ec)
         {
+            printf("[TorrentCore] ERROR: Failed to parse magnet URI: %s\n", ec.message().c_str());
             return 0; // Bad magnet
         }
 
+        printf("[TorrentCore] Magnet URI parsed successfully\n");
+        printf("  - Info hash: %s\n", params.info_hashes.has_v1() ? 
+               libtorrent::aux::to_hex(params.info_hashes.v1).c_str() : "none");
+        printf("  - Tracker count: %zu\n", params.trackers.size());
+        for (size_t i = 0; i < params.trackers.size() && i < 5; ++i) {
+            printf("    [%zu] %s\n", i, params.trackers[i].c_str());
+        }
+
         int id = nextId_++;
+        printf("[TorrentCore] Adding torrent to session with ID %d\n", id);
+        
         torrent_handle handle = ses_->add_torrent(params, ec);
         if (ec || !handle.is_valid())
         {
+            printf("[TorrentCore] ERROR: Failed to add torrent to session: %s\n", 
+                   ec.message().c_str());
             return 0; // Failed to add
         }
+
+        printf("[TorrentCore] Torrent added to session successfully\n");
 
         // Use emplace to construct Entry in-place
         auto [it, inserted] = map_.try_emplace(id);
         if (!inserted)
         {
+            printf("[TorrentCore] ERROR: ID collision for torrent %d\n", id);
             return 0; // ID collision (shouldn't happen)
         }
 
@@ -104,6 +158,7 @@ namespace tc
         entry.createdAt = std::chrono::system_clock::now();
         entry.lastStatsUpdate = std::chrono::steady_clock::now();
 
+        printf("[TorrentCore] Torrent %d setup complete, starting download\n", id);
         return id;
     }
 
@@ -368,6 +423,9 @@ namespace tc
 
         for (alert *a : alerts)
         {
+            // Log all alerts for debugging
+            printf("[TorrentCore] Alert: %s - %s\n", a->what(), a->message().c_str());
+            
             if (auto *md = alert_cast<metadata_received_alert>(a))
             {
                 handleMetadataAlert(md);
@@ -379,6 +437,38 @@ namespace tc
             else if (auto *err = alert_cast<torrent_error_alert>(a))
             {
                 handleErrorAlert(err);
+            }
+            // Add more specific alert handling for debugging peer connections
+            else if (auto *peer_connect = alert_cast<peer_connect_alert>(a))
+            {
+                printf("[TorrentCore] Peer connected: %s\n", 
+                       peer_connect->endpoint.address().to_string().c_str());
+            }
+            else if (auto *peer_disconnect = alert_cast<peer_disconnected_alert>(a))
+            {
+                printf("[TorrentCore] Peer disconnected: %s (reason: %s)\n", 
+                       peer_disconnect->endpoint.address().to_string().c_str(),
+                       peer_disconnect->message().c_str());
+            }
+            else if (auto *tracker_announce = alert_cast<tracker_announce_alert>(a))
+            {
+                printf("[TorrentCore] Announcing to tracker\n");
+            }
+            else if (auto *tracker_reply = alert_cast<tracker_reply_alert>(a))
+            {
+                printf("[TorrentCore] Tracker reply - %d peers\n", tracker_reply->num_peers);
+            }
+            else if (auto *tracker_error = alert_cast<tracker_error_alert>(a))
+            {
+                printf("[TorrentCore] Tracker error: %s\n", tracker_error->message().c_str());
+            }
+            else if (auto *dht_announce = alert_cast<dht_announce_alert>(a))
+            {
+                printf("[TorrentCore] DHT announce\n");
+            }
+            else if (auto *dht_get_peers = alert_cast<dht_get_peers_alert>(a))
+            {
+                printf("[TorrentCore] DHT get_peers\n");
             }
         }
     }
@@ -453,6 +543,27 @@ namespace tc
                 stats.peers = st.num_peers;
                 stats.state = entry.state; // This will now be the updated state
 
+                // Add detailed debugging for peer connectivity issues
+                static int logCounter = 0;
+                if (logCounter++ % 20 == 0) { // Log every 10 seconds (500ms * 20)
+                    printf("[TorrentCore] Torrent %d stats:\n", id);
+                    printf("  - State: %s\n", stateToString(stats.state));
+                    printf("  - Progress: %.1f%%\n", stats.progress * 100.0f);
+                    printf("  - Download rate: %d B/s\n", stats.dlRate);
+                    printf("  - Upload rate: %d B/s\n", stats.ulRate);
+                    printf("  - Seeds: %d (connected: %d)\n", stats.seeds, st.num_seeds);
+                    printf("  - Peers: %d (connected: %d)\n", stats.peers, st.num_peers);
+                    printf("  - List seeds: %d, List peers: %d\n", st.list_seeds, st.list_peers);
+                    printf("  - Connect candidates: %d\n", st.connect_candidates);
+                    printf("  - Total download: %lld bytes\n", st.total_download);
+                    printf("  - Total upload: %lld bytes\n", st.total_upload);
+                    printf("  - All time download: %lld bytes\n", st.all_time_download);
+                    printf("  - All time upload: %lld bytes\n", st.all_time_upload);
+                    printf("  - Has metadata: %s\n", st.has_metadata ? "yes" : "no");
+                    
+                    printf("---\n");
+                }
+
                 // Thread-safe callback execution
                 {
                     std::lock_guard callbackLock(entry.callbackMutex);
@@ -480,6 +591,8 @@ namespace tc
 
     void Manager::handleMetadataAlert(metadata_received_alert *alert)
     {
+        printf("[TorrentCore] Metadata received for torrent\n");
+        
         std::lock_guard lock(mtx_);
 
         for (auto &[id, entry] : map_)
@@ -487,6 +600,7 @@ namespace tc
             if (entry.torrentHandle == alert->handle &&
                 !entry.metadataDelivered.exchange(true))
             {
+                printf("[TorrentCore] Processing metadata for torrent %d\n", id);
 
                 Metadata m;
                 m.id = id;
@@ -500,9 +614,17 @@ namespace tc
                     m.creationDate = info->creation_date();
                     m.isPrivate = info->priv();
                     m.isV2 = info->v2();
+                    
+                    printf("[TorrentCore] Metadata details:\n");
+                    printf("  - Name: %s\n", m.name.c_str());
+                    printf("  - Size: %lld bytes\n", m.totalBytes);
+                    printf("  - Pieces: %d (each %d bytes)\n", m.pieceCount, m.pieceSize);
+                    printf("  - Files: %d\n", m.fileCount);
+                    printf("  - Private: %s\n", m.isPrivate ? "yes" : "no");
                 }
 
                 entry.state = TorrentState::Downloading;
+                printf("[TorrentCore] Torrent %d state changed to Downloading\n", id);
 
                 // Thread-safe callback execution
                 {
@@ -519,6 +641,8 @@ namespace tc
 
     void Manager::handleMetadataFailedAlert(metadata_failed_alert *alert)
     {
+        printf("[TorrentCore] Metadata failed for torrent: %s\n", alert->message().c_str());
+        
         std::lock_guard lock(mtx_);
 
         for (auto &[id, entry] : map_)
@@ -526,7 +650,7 @@ namespace tc
             if (entry.torrentHandle == alert->handle &&
                 !entry.metadataDelivered.exchange(true))
             {
-
+                printf("[TorrentCore] Metadata failed for torrent %d: %s\n", id, alert->message().c_str());
                 entry.state = TorrentState::Error;
                 entry.lastError = "Failed to download metadata";
 
@@ -548,12 +672,15 @@ namespace tc
 
     void Manager::handleErrorAlert(torrent_error_alert *alert)
     {
+        printf("[TorrentCore] Torrent error: %s\n", alert->error.message().c_str());
+        
         std::lock_guard lock(mtx_);
 
         for (auto &[id, entry] : map_)
         {
             if (entry.torrentHandle == alert->handle)
             {
+                printf("[TorrentCore] Error for torrent %d: %s\n", id, alert->error.message().c_str());
                 entry.state = TorrentState::Error;
                 entry.lastError = alert->error.message();
                 break;
