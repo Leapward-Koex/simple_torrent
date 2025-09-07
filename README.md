@@ -5,25 +5,13 @@ A high-performance Flutter plugin for torrent downloading and management, built 
 ## Features
 
 - ✅ **High Performance**: Built with libtorrent-rasterbar for optimal performance
-- ✅ **Cross-Platform**: Supports Android and iOS
+- ✅ **Cross-Platform**: Supports Android, iOS, macOS, and Windows
 - ✅ **Real-time Updates**: Stream-based progress monitoring and metadata updates
 - ✅ **Thread-Safe**: Non-blocking operations prevent ANR issues
 - ✅ **Comprehensive API**: Full torrent lifecycle management
 - ✅ **Configurable**: Runtime configuration updates for bandwidth limits, DHT, etc.
-- ✅ **Modern Architecture**: Uses Kotlin coroutines and Dart streams
 
 ## Getting Started
-
-### Installation
-
-Add this to your `pubspec.yaml`:
-
-```yaml
-dependencies:
-  simple_torrent:
-    git:
-      url: https://github.com/Leapward-Koex/simple_torrent.git
-```
 
 ### Basic Usage
 
@@ -71,8 +59,6 @@ Add the following entitlements to your macOS app's entitlements files:
   <true/>
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
-  <key>com.apple.security.network.server</key>
-  <true/>
   <key>com.apple.security.network.client</key>
   <true/>
   <key>com.apple.security.files.user-selected.read-write</key>
@@ -89,8 +75,6 @@ Add the following entitlements to your macOS app's entitlements files:
 <dict>
   <key>com.apple.security.app-sandbox</key>
   <true/>
-  <key>com.apple.security.network.server</key>
-  <true/>
   <key>com.apple.security.network.client</key>
   <true/>
   <key>com.apple.security.files.user-selected.read-write</key>
@@ -102,7 +86,6 @@ Add the following entitlements to your macOS app's entitlements files:
 #### Key Entitlements Explained
 
 - **com.apple.security.network.client**: Allows outbound network connections for torrent downloading
-- **com.apple.security.network.server**: Allows inbound connections for peer-to-peer communication
 - **com.apple.security.files.user-selected.read-write**: Allows access to directories chosen by the user via file picker
 
 #### Required Implementation Pattern
@@ -416,23 +399,62 @@ For developers who want to modify the native libtorrent integration or build fro
 ### Prerequisites
 
 - **libtorrent-rasterbar** (Currently 2.0.11)
-- **Boost C++ Libraries** (Currently 1.88.0)  
-- **Android NDK** (Currently 29.0.13113456)
+- **Boost C++ Libraries** (Currently 1.88.0)
+- **Platform-specific toolchains** (see individual platform sections below)
 
-### General Build Process
+### Quick Start
 
-1. Setup prerequisites
-2. Configure user-config.jam for your target architecture
-3. Build Boost B2 for your toolset
-4. Create Boost BCP tool for header extraction
-5. Compile libtorrent and copy binaries
-6. Generate required Boost headers using BCP
+Each platform has automated build scripts available in the `build_scripts/` directory:
 
-### Android Build Configuration
+- **Android**: `build_android_universal.sh` or `build_android_universal.ps1`
+- **iOS**: `build_ios_universal.sh`
+- **macOS**: `build_macos_complete.sh`
+- **Windows**: `build_windows_x64.ps1`
 
-#### user-config.jam Setup
+### Platform-Specific Instructions
 
-Create this file in your home directory for android-arm64-v8a:
+## Android
+
+### Prerequisites
+- **Android NDK** (Currently 29.0.13113456) - Set `ANDROID_NDK` environment variable
+- **CMake 3.18+**
+- **Ninja build system**
+
+### Quick Build (All Architectures)
+
+**For macOS/Linux:**
+```bash
+cd build_scripts
+./build_android_universal.sh
+```
+
+**For Windows:**
+```powershell
+cd build_scripts
+.\build_android_universal.ps1
+```
+
+This builds for all Android architectures (arm64-v8a, armeabi-v7a, x86_64) and copies libraries to the correct locations.
+
+### Individual Architecture Builds
+
+**For macOS/Linux:**
+```bash
+./build_android_arm64-v8a.sh      # Most common (64-bit ARM)
+./build_android_armabi-v7a.sh     # Legacy (32-bit ARM)  
+./build_android_x86_64.sh         # Emulator (64-bit x86)
+```
+
+**For Windows:**
+```powershell
+.\build_android_arm64-v8a.ps1      # Most common (64-bit ARM)
+.\build_android_armabi-v7a.ps1     # Legacy (32-bit ARM)  
+.\build_android_x86_64.ps1         # Emulator (64-bit x86)
+```
+
+### Manual Configuration (Advanced)
+
+If you need to modify the build process, you can configure `user-config.jam` for your target architecture:
 
 ```jam
 using clang : android
@@ -446,50 +468,173 @@ using clang : android
 ;
 ```
 
-#### Build Boost
+## iOS
+
+### Prerequisites
+- **Xcode** with Command Line Tools
+- **CMake** (via Homebrew: `brew install cmake`)
+- **macOS** (iOS development requires macOS)
+
+### Quick Build (Universal Libraries)
 
 ```bash
-b2 -j%NUMBER_OF_PROCESSORS% ^
-    toolset=clang-android ^
-    target-os=android architecture=arm address-model=64 ^
-    cxxstd=17 link=static runtime-link=static threading=multi ^
-    --with-system --with-atomic ^
-    --hash ^
-    install --prefix="<output folder location>"
+cd build_scripts
+./build_ios_universal.sh
 ```
 
-#### Build BCP Tool
+This will:
+1. Build for iOS device (arm64)
+2. Build for iOS simulator (arm64 + x86_64)
+3. Create universal binaries using `lipo`
+4. Copy headers and libraries to the correct locations
+
+### Individual Architecture Builds
 
 ```bash
-b2 --with-bcp toolset=msvc address-model=64 architecture=x86 link=static runtime-link=static release
+./build_iphoneos_arm64.sh           # iOS device (arm64)
+./build_iphonesimulator_arm64.sh    # iOS simulator (arm64)
+./build_iphonesimulator_x86_64.sh   # iOS simulator (x86_64, legacy)
 ```
 
-#### Build libtorrent
+### Cleaning Build Artifacts
 
 ```bash
-b2 -j%NUMBER_OF_PROCESSORS% ^
-   toolset=clang-android ^
-   target-os=android architecture=arm address-model=64 ^
-   cxxstd=17 ^
-   link=static             ^
-   boost-link=static       ^
-   runtime-link=static     ^
-   crypto=built-in         ^
-   variant=release         ^
-   fpic=on                 ^
-   --hash                  ^
-   --prefix="<output folder location>" install
+./clean_ios.sh
 ```
 
-#### Extract Boost Headers
+### Testing Build Scripts
 
 ```bash
-bcp --boost=<path to boost> --scan ^
-    "<path to libtorrent>\include\libtorrent\session.hpp" ^
-    "<path to libtorrent>\include\libtorrent\alert_types.hpp" ^
-    "<path to libtorrent>\include\libtorrent\magnet_uri.hpp" ^
-    "<output path, e.g. 'simple_torrent\android\src\main\cpp\third_party\boost'>"
+./test_ios_builds.sh
 ```
+
+## macOS
+
+### Prerequisites
+- **Xcode** with Command Line Tools
+- **CMake** (via Homebrew: `brew install cmake`)
+- **Boost 1.88.0** source code (will be downloaded automatically)
+
+### Quick Build (Complete)
+
+```bash
+cd build_scripts
+./build_macos_complete.sh
+```
+
+This will:
+1. Build Boost and libtorrent for arm64 (Apple Silicon)
+2. Build Boost and libtorrent for x86_64 (Intel)
+3. Create universal (fat) binaries
+4. Organize libraries in the correct structure
+
+### Individual Build Steps
+
+```bash
+./build_macos_arm64.sh        # Apple Silicon only
+./build_macos_x86_64.sh       # Intel only
+./build_macos_universal.sh    # Create universal binaries
+./organize_macos_libs.sh      # Organize final structure
+```
+
+## Windows
+
+### Prerequisites
+- **Visual Studio 2022** with C++ build tools
+- **CMake 3.14+** (included with Visual Studio)
+- **Boost 1.88.0** extracted to `c:\Dev\boost_1_88_0`
+- **libtorrent** source code at `c:\Dev\libtorrent`
+
+### Quick Build
+
+```powershell
+cd build_scripts
+.\build_windows_x64.ps1 -Configuration Release
+```
+
+This will build libtorrent for Windows x64 and copy libraries to the correct location.
+
+### Manual CMake Build (Advanced)
+
+```powershell
+# Create build directory
+mkdir c:\Dev\libtorrent\build_windows_x64
+cd c:\Dev\libtorrent\build_windows_x64
+
+# Configure with CMake
+cmake -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_BUILD_TYPE=Release ^
+  -DCMAKE_CXX_STANDARD=17 ^
+  -DBUILD_SHARED_LIBS=OFF ^
+  -Ddeprecated-functions=OFF ^
+  -Dencryption=ON ^
+  -Ddht=ON ^
+  -Dextensions=ON ^
+  -Dlogging=ON ^
+  -Dpython-bindings=OFF ^
+  -Dtests=OFF ^
+  -Dexamples=OFF ^
+  -Dtools=OFF ^
+  -DBoost_ROOT=c:\Dev\boost_1_88_0 ^
+  -DBoost_USE_STATIC_LIBS=ON ^
+  -DCMAKE_INSTALL_PREFIX=c:\Dev\simple_torrent\shared\lib\windows ^
+  ..
+
+# Build and install
+cmake --build . --config Release --parallel
+```
+
+### Directory Structure
+
+After building, the native libraries should be organized as follows:
+
+```
+shared/
+├── lib/
+│   ├── android/
+│   │   ├── arm64-v8a/
+│   │   ├── armeabi-v7a/
+│   │   └── x86_64/
+│   ├── ios/
+│   │   ├── device/
+│   │   ├── simulator/
+│   │   └── universal/
+│   ├── macos/
+│   │   ├── arm64/
+│   │   ├── x86_64/
+│   │   └── universal/
+│   └── windows/
+│       └── lib/
+├── third_party/
+│   ├── boost/
+│   └── libtorrent/
+└── torrent_core/
+```
+
+### Troubleshooting
+
+For detailed platform-specific troubleshooting, see:
+- `build_scripts/README_Android.md`
+- `build_scripts/README_iOS.md`
+- `build_scripts/README_macOS.md`
+- `build_scripts/README_Windows.md`
+
+## Contributions Welcome
+
+**Note**: Due to limited time and device availability, I cannot guarantee perfect support for all platforms and architectures.
+
+**Contributions are welcomed** for:
+- Bug fixes on untested platforms/architectures
+- Build script improvements
+- Documentation enhancements
+- Performance optimizations
+- Additional platform support (Linux, etc.)
+
+If you encounter issues on specific platforms or have improvements, please:
+1. Open an issue with detailed reproduction steps
+2. Submit a pull request with fixes
+3. Share build logs for debugging
+
 
 ## License
 
