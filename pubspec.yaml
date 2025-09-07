@@ -1,7 +1,8 @@
 name: simple_torrent
 description: "A basic torrent library for Flutter using libtorrent."
 version: 1.0.0
-homepage:
+homepage: https://github.com/Leapward-Koex/simple_torrent
+repository: https://github.com/Leapward-Koex/simple_torrent
 
 environment:
   sdk: ^3.7.2
@@ -38,8 +39,6 @@ flutter:
         package: com.leapwardkoex.simple_torrent.simple_torrent
         pluginClass: SimpleTorrentPlugin
       ios:
-        pluginClass: SimpleTorrentPlugin
-      linux:
         pluginClass: SimpleTorrentPlugin
       macos:
         pluginClass: SimpleTorrentPlugin
