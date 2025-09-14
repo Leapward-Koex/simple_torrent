@@ -1,0 +1,29 @@
+name: simple_torrent_android
+description: Android implementation of the simple_torrent plugin
+version: 1.0.0
+homepage: https://github.com/Leapward-Koex/simple_torrent
+repository: https://github.com/Leapward-Koex/simple_torrent/tree/master/packages/simple_torrent_android
+
+environment:
+  sdk: ^3.7.2
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  simple_torrent_platform_interface:
+    path: ../simple_torrent_platform_interface
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  plugin:
+    implements: simple_torrent
+    platforms:
+      android:
+        package: com.leapwardkoex.simple_torrent.simple_torrent
+        pluginClass: SimpleTorrentPlugin
+        dartPluginClass: SimpleTorrentAndroid
