@@ -10,8 +10,33 @@ A high-performance Flutter plugin for torrent downloading and management, built 
 - ✅ **Thread-Safe**: Non-blocking operations prevent ANR issues
 - ✅ **Comprehensive API**: Full torrent lifecycle management
 - ✅ **Configurable**: Runtime configuration updates for bandwidth limits, DHT, etc.
+- ✅ **Federated Architecture**: Platform-specific implementations in separate packages
+
+## Federated Plugin Architecture
+
+This plugin uses a federated architecture with separate packages for each platform:
+
+- **`simple_torrent`** - Main plugin with the Dart API
+- **`simple_torrent_platform_interface`** - Platform interface
+- **`simple_torrent_android`** - Android implementation
+- **`simple_torrent_ios`** - iOS implementation  
+- **`simple_torrent_macos`** - macOS implementation
+- **`simple_torrent_windows`** - Windows implementation
+
+This architecture allows each platform package to include only the necessary binaries, keeping package sizes manageable.
 
 ## Getting Started
+
+### Installation
+
+Add this to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  simple_torrent: ^1.0.0
+```
+
+The platform-specific packages will be automatically included based on your target platforms.
 
 ### Basic Usage
 
