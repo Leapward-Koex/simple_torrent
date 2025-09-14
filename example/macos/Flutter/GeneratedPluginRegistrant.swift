@@ -6,7 +6,7 @@ import FlutterMacOS
 import Foundation
 
 import file_picker
-import simple_torrent
+import simple_torrent_macos
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FilePickerPlugin.register(with: registry.registrar(forPlugin: "FilePickerPlugin"))

@@ -3,7 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  simple_torrent
+  simple_torrent_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

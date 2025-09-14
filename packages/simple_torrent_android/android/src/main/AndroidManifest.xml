@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  package="com.leapwardkoex.simple_torrent.simple_torrent">
+      <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- File downloads to external storage need this on Android < 10 -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+                     android:maxSdkVersion="28"/>
+</manifest>

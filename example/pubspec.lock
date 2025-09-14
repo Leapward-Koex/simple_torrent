@@ -230,6 +230,41 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  simple_torrent_android:
+    dependency: transitive
+    description:
+      path: "../packages/simple_torrent_android"
+      relative: true
+    source: path
+    version: "1.0.0"
+  simple_torrent_ios:
+    dependency: transitive
+    description:
+      path: "../packages/simple_torrent_ios"
+      relative: true
+    source: path
+    version: "1.0.0"
+  simple_torrent_macos:
+    dependency: transitive
+    description:
+      path: "../packages/simple_torrent_macos"
+      relative: true
+    source: path
+    version: "1.0.0"
+  simple_torrent_platform_interface:
+    dependency: transitive
+    description:
+      path: "../packages/simple_torrent_platform_interface"
+      relative: true
+    source: path
+    version: "1.0.0"
+  simple_torrent_windows:
+    dependency: transitive
+    description:
+      path: "../packages/simple_torrent_windows"
+      relative: true
+    source: path
+    version: "1.0.0"
   sky_engine:
     dependency: transitive
     description: flutter

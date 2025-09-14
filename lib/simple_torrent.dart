@@ -1,6 +1,6 @@
 library;
 
-export 'simple_torrent_platform_interface.dart'
+export 'package:simple_torrent_platform_interface/simple_torrent_platform_interface.dart'
     show
         TorrentStats,
         TorrentMetadata,
@@ -10,7 +10,7 @@ export 'simple_torrent_platform_interface.dart'
 
 import 'dart:typed_data';
 
-import 'simple_torrent_platform_interface.dart';
+import 'package:simple_torrent_platform_interface/simple_torrent_platform_interface.dart';
 
 /// Public API used by Flutter apps.
 class SimpleTorrent {

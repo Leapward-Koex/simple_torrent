@@ -4,6 +4,8 @@ version: 1.0.0
 homepage: https://github.com/Leapward-Koex/simple_torrent
 repository: https://github.com/Leapward-Koex/simple_torrent
 
+publish_to: none  # This is a federated package that should not be published
+
 environment:
   sdk: ^3.7.2
   flutter: '>=3.3.0'
@@ -11,39 +13,30 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  plugin_platform_interface: ^2.0.2
+  simple_torrent_platform_interface:
+    path: packages/simple_torrent_platform_interface
+  simple_torrent_android:
+    path: packages/simple_torrent_android
+  simple_torrent_ios:
+    path: packages/simple_torrent_ios
+  simple_torrent_macos:
+    path: packages/simple_torrent_macos
+  simple_torrent_windows:
+    path: packages/simple_torrent_windows
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  test: ^1.25.15
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
-  # This section identifies this Flutter project as a plugin project.
-  # The 'pluginClass' specifies the class (in Java, Kotlin, Swift, Objective-C, etc.)
-  # which should be registered in the plugin registry. This is required for
-  # using method channels.
-  # The Android 'package' specifies package in which the registered class is.
-  # This is required for using method channels on Android.
-  # The 'ffiPlugin' specifies that native code should be built and bundled.
-  # This is required for using `dart:ffi`.
-  # All these are used by the tooling to maintain consistency when
-  # adding or updating assets for this project.
-  plugin:
-    platforms:
-      android:
-        package: com.leapwardkoex.simple_torrent.simple_torrent
-        pluginClass: SimpleTorrentPlugin
-      ios:
-        pluginClass: SimpleTorrentPlugin
-      macos:
-        pluginClass: SimpleTorrentPlugin
-      windows:
-        pluginClass: SimpleTorrentPluginCApi
+  # This main package provides the Dart API and depends on federated platform packages.
+  # No plugin configuration is needed as this is handled by the platform packages.
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

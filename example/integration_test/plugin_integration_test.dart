@@ -25,7 +25,17 @@ void main() {
 
   testWidgets('SimpleTorrent configuration test', (WidgetTester tester) async {
     // Test initialization with custom configuration
-    const config = TorrentConfig(maxTorrents: 5, maxDownloadRate: 1024, maxUploadRate: 512, enableDHT: true, userAgent: 'TestApp/1.0');
+    const config = TorrentConfig(
+      maxTorrents: 5,
+      maxDownloadRate: 1024 * 1024, // 1MB/s
+      maxUploadRate: 512 * 1024,    // 512KB/s
+      enableDHT: true,
+      userAgent: 'TestApp/1.0',
+      downloadLimit: 1024 * 1024,   // Alternative rate limit
+      uploadLimit: 512 * 1024,      // Alternative rate limit
+      connections: 50,
+      autoManaged: true,
+    );
 
     await SimpleTorrent.init(config: config);
 
@@ -34,7 +44,9 @@ void main() {
     expect(activeIds, isA<List<int>>());
   });
 
-  testWidgets('SimpleTorrent invalid torrent operations', (WidgetTester tester) async {
+  testWidgets('SimpleTorrent invalid torrent operations', (
+    WidgetTester tester,
+  ) async {
     await SimpleTorrent.init();
 
     // Test checking non-existent torrent

@@ -42,7 +42,7 @@ class _SimpleDemoPageState extends State<SimpleDemoPage> {
             : Platform.isIOS
             ? 'Documents'
             : Platform.isMacOS
-            ? Platform.environment['HOME']! + '/Downloads'
+            ? '${Platform.environment['HOME']!}/Downloads'
             : '/tmp',
   );
   bool _initialised = false;
@@ -63,9 +63,15 @@ class _SimpleDemoPageState extends State<SimpleDemoPage> {
     try {
       await SimpleTorrent.init(
         config: const TorrentConfig(
-          maxTorrents: 3,
+          maxTorrents: 5,
+          maxDownloadRate: 1024 * 1024, // 1MB/s
+          maxUploadRate: 512 * 1024,    // 512KB/s
           enableDHT: true,
           userAgent: 'SimpleTorrentDemo/1.0',
+          downloadLimit: 1024 * 1024,   // Alternative rate limit
+          uploadLimit: 512 * 1024,      // Alternative rate limit
+          connections: 50,
+          autoManaged: true,
         ),
       );
       await _loadActive();
