@@ -1,0 +1,42 @@
+name: simple_torrent
+description: A small, strongly typed Flutter BitTorrent client powered by bundled libtorrent binaries.
+version: 2.0.0
+homepage: https://github.com/Leapward-Koex/simple_torrent
+repository: https://github.com/Leapward-Koex/simple_torrent/tree/master/packages/simple_torrent
+issue_tracker: https://github.com/Leapward-Koex/simple_torrent/issues
+topics:
+  - bittorrent
+  - torrent
+  - libtorrent
+  - p2p
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.44.0'
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  simple_torrent_android: ^2.0.0
+  simple_torrent_ios: ^2.0.0
+  simple_torrent_macos: ^2.0.0
+  simple_torrent_platform_interface: ^2.0.0
+  simple_torrent_windows: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        default_package: simple_torrent_android
+      ios:
+        default_package: simple_torrent_ios
+      macos:
+        default_package: simple_torrent_macos
+      windows:
+        default_package: simple_torrent_windows

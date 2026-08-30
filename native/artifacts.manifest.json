@@ -1,0 +1,570 @@
+{
+  "schemaVersion": 2,
+  "builderVersion": "2.0.0",
+  "nativeAbi": 2,
+  "sourceDateEpoch": 1773440070,
+  "dependencies": {
+    "libtorrent": {
+      "version": "2.0.12",
+      "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
+      "patches": []
+    },
+    "boost": {
+      "version": "1.91.0",
+      "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
+      "patches": [
+        {
+          "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
+          "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
+        }
+      ]
+    },
+    "openssl": {
+      "version": "3.5.8",
+      "archiveSha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2",
+      "patches": []
+    }
+  },
+  "assets": {
+    "mozilla-ca-bundle": {
+      "version": "2026-08-13",
+      "sha256": "f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9"
+    }
+  },
+  "auxiliaryTools": {
+    "nasm-windows-x64": {
+      "version": "2.16.03",
+      "archiveSha256": "3ee4782247bcb874378d02f7eab4e294a84d3d15f3f6ee2de2f47a46aa7226e6"
+    },
+    "perl-windows-x64": {
+      "version": "5.40.2.1",
+      "archiveSha256": "7707700d5ad027773b775134fe48cd9610abf221433fcfb68c8eb0ec9c6fde8c"
+    }
+  },
+  "toolchains": {
+    "androidNdk": "29.0.13113456",
+    "androidApi": 24,
+    "windowsMinimum": "10.0",
+    "iosMinimum": "15.0",
+    "macosMinimum": "12.0"
+  },
+  "hostTools": {
+    "windows": {
+      "cmake": "cmake version 3.29.3 | CMake suite maintained and supported by Kitware (kitware.com/cmake).",
+      "msvcToolset": "14.44.35207",
+      "windowsSdk": "10.0.26100.0"
+    },
+    "android": {
+      "cmake": "cmake version 3.29.3 | CMake suite maintained and supported by Kitware (kitware.com/cmake).",
+      "androidNdk": "29.0.13113456",
+      "clang": "Android (13065274, based on r547379) clang version 20.0.0 (https://android.googlesource.com/toolchain/llvm-project b718bcaf8c198c82f3021447d943401e3ab5bd54) | Target: x86_64-w64-windows-gnu",
+      "git": "git version 2.45.1.windows.1",
+      "posixPerl": "msys v5.38.2"
+    }
+  },
+  "platforms": {
+    "windows": {
+      "architectures": [
+        "x64"
+      ],
+      "minimum": "10.0",
+      "buildType": "Release",
+      "opensslLinkage": "static",
+      "features": {
+        "cxxStandard": 17,
+        "cAbi": true,
+        "libtorrentLinkage": "static",
+        "opensslLinkage": "static",
+        "cxxRuntimeLinkage": "static",
+        "dht": true,
+        "extensions": true,
+        "encryption": true,
+        "logging": false,
+        "deprecatedApis": false,
+        "sharedOutput": true,
+        "minimumTarget": "10.0"
+      },
+      "buildFlags": [
+        "CMAKE_BUILD_TYPE=Release",
+        "SOURCE_DATE_EPOCH=1773440070",
+        "CXX_STANDARD=17",
+        "TORRENT_LINKING_STATIC=1",
+        "BOOST_ALL_NO_LIB=1",
+        "build_tests=OFF",
+        "build_examples=OFF",
+        "build_tools=OFF",
+        "python-bindings=OFF",
+        "deprecated-functions=OFF",
+        "logging=OFF",
+        "encryption=ON",
+        "dht=ON",
+        "MSVC_RUNTIME_LIBRARY=MultiThreaded",
+        "/Brepro",
+        "/experimental:deterministic",
+        "/pathmap:<source>=.",
+        "/PDBALTPATH:%_PDB%",
+        "WINVER=0x0A00"
+      ],
+      "hostTools": {
+        "cmake": "cmake version 3.29.3 | CMake suite maintained and supported by Kitware (kitware.com/cmake).",
+        "msvcToolset": "14.44.35207",
+        "windowsSdk": "10.0.26100.0"
+      },
+      "buildProvenance": {
+        "schemaVersion": 1,
+        "target": "windows",
+        "artifactInputs": {
+          "schemaVersion": 2,
+          "builderVersion": "2.0.0",
+          "nativeAbi": 2,
+          "sourceDateEpoch": 1773440070,
+          "dependencies": {
+            "libtorrent": {
+              "version": "2.0.12",
+              "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
+              "patches": []
+            },
+            "boost": {
+              "version": "1.91.0",
+              "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
+              "patches": [
+                {
+                  "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
+                  "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
+                }
+              ]
+            },
+            "openssl": {
+              "version": "3.5.8",
+              "archiveSha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2",
+              "patches": []
+            }
+          },
+          "assets": {
+            "mozilla-ca-bundle": {
+              "version": "2026-08-13",
+              "sha256": "f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9"
+            }
+          },
+          "auxiliaryTools": {
+            "nasm-windows-x64": {
+              "version": "2.16.03",
+              "archiveSha256": "3ee4782247bcb874378d02f7eab4e294a84d3d15f3f6ee2de2f47a46aa7226e6"
+            },
+            "perl-windows-x64": {
+              "version": "5.40.2.1",
+              "archiveSha256": "7707700d5ad027773b775134fe48cd9610abf221433fcfb68c8eb0ec9c6fde8c"
+            }
+          },
+          "toolchains": {
+            "androidNdk": "29.0.13113456",
+            "androidApi": 24,
+            "windowsMinimum": "10.0",
+            "iosMinimum": "15.0",
+            "macosMinimum": "12.0"
+          }
+        },
+        "recipe": {
+          "architectures": [
+            "x64"
+          ],
+          "minimum": "10.0",
+          "buildType": "Release",
+          "opensslLinkage": "static",
+          "features": {
+            "cxxStandard": 17,
+            "cAbi": true,
+            "libtorrentLinkage": "static",
+            "opensslLinkage": "static",
+            "cxxRuntimeLinkage": "static",
+            "dht": true,
+            "extensions": true,
+            "encryption": true,
+            "logging": false,
+            "deprecatedApis": false,
+            "sharedOutput": true,
+            "minimumTarget": "10.0"
+          },
+          "buildFlags": [
+            "CMAKE_BUILD_TYPE=Release",
+            "SOURCE_DATE_EPOCH=1773440070",
+            "CXX_STANDARD=17",
+            "TORRENT_LINKING_STATIC=1",
+            "BOOST_ALL_NO_LIB=1",
+            "build_tests=OFF",
+            "build_examples=OFF",
+            "build_tools=OFF",
+            "python-bindings=OFF",
+            "deprecated-functions=OFF",
+            "logging=OFF",
+            "encryption=ON",
+            "dht=ON",
+            "MSVC_RUNTIME_LIBRARY=MultiThreaded",
+            "/Brepro",
+            "/experimental:deterministic",
+            "/pathmap:<source>=.",
+            "/PDBALTPATH:%_PDB%",
+            "WINVER=0x0A00"
+          ]
+        },
+        "nativeInputs": {
+          "schemaVersion": 1,
+          "normalization": "utf8-lf-v1",
+          "target": "windows",
+          "files": [
+            {
+              "path": "native/CMakeLists.txt",
+              "size": 11948,
+              "sha256": "c611e2a4bd37f270afcee83208397a4bd94b4d500530bd2d36dda719fff6a739"
+            },
+            {
+              "path": "native/dependencies.lock.json",
+              "size": 2096,
+              "sha256": "5361966a3d2404c27aaa6034f2fbe6a76d1fae4f209fb822bfc2e5490303e931"
+            },
+            {
+              "path": "native/include/module.modulemap",
+              "size": 77,
+              "sha256": "e92739ad664d5d0bed0df00d4ff08b6a7c5df42cd52a561461c2f7b2357e12c5"
+            },
+            {
+              "path": "native/include/simple_torrent_native.h",
+              "size": 7878,
+              "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
+            },
+            {
+              "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
+              "size": 712,
+              "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
+            },
+            {
+              "path": "native/src/embedded_ca_bundle.cpp",
+              "size": 581,
+              "sha256": "5806afb0d977a74df3489911c9ff39f85619b7c6893407622927e54f7a3f708f"
+            },
+            {
+              "path": "native/src/simple_torrent_native.cpp",
+              "size": 18617,
+              "sha256": "543168e46c26cc02933e6fc8b3b929be565dca704de50c692336e255915b54f2"
+            },
+            {
+              "path": "native/src/torrent_manager.cpp",
+              "size": 27072,
+              "sha256": "5acff13a03b1d3e4347acf8ea1867bacc1c9434c0a88760f8a46d627b9919606"
+            },
+            {
+              "path": "native/src/torrent_manager.hpp",
+              "size": 5755,
+              "sha256": "73f06e7eae685b20ae99653df1116ed66bd11e0c6cbdc8d47edd2db5b1ce6de6"
+            },
+            {
+              "path": "native/test/session_suspension_test.cpp",
+              "size": 5525,
+              "sha256": "5ba69f6f74ccc576ba24187e0e0368ce320dabe15b4340f4b7490dc8021a4eba"
+            },
+            {
+              "path": "tool/native.dart",
+              "size": 888,
+              "sha256": "20a8d92a09aff255f4e59398e83b2086adf590d545bd2a8a96de76e119425aa3"
+            },
+            {
+              "path": "tool/native.ps1",
+              "size": 1464,
+              "sha256": "b2fa2a58ad3b65a4fa96785d5f11a7e33d256b6c1f0dffc00156f453fd927e8a"
+            },
+            {
+              "path": "tool/native.sh",
+              "size": 1181,
+              "sha256": "5a5a169fa9fa4ee2b1975976d1b81c6143ad1618ff70810a0229d4062dd4771b"
+            },
+            {
+              "path": "tool/src/native_builder.dart",
+              "size": 119117,
+              "sha256": "1eb8d73029a608387f8c7c64336a915b9b2777400b87ced3efa9aaf8cbbdee9a"
+            }
+          ],
+          "sha256": "62ef9b16cfe79e8501fa08172ab6de1c4b654ae25b67bab15c3733033a717d91"
+        }
+      },
+      "files": [
+        {
+          "path": "packages/simple_torrent_windows/windows/include/simple_torrent_native.h",
+          "size": 7878,
+          "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
+        },
+        {
+          "path": "packages/simple_torrent_windows/windows/include/simple_torrent_windows/simple_torrent_plugin_c_api.h",
+          "size": 592,
+          "sha256": "d858c03eb021d04bf356741de86bd73b74b3100019fac00fb0888806f7e3bd31"
+        },
+        {
+          "path": "packages/simple_torrent_windows/windows/lib/x64/simple_torrent_native.dll",
+          "size": 9243136,
+          "sha256": "160500bbebbb8c7f5698af3128c75a8efce17a8c9e0313bc989f757469c783e6"
+        },
+        {
+          "path": "packages/simple_torrent_windows/windows/lib/x64/simple_torrent_native.lib",
+          "size": 9814,
+          "sha256": "85d0fd6869bf40b006aaa85bfad61e1dd0aacd6e5f0c400bb9d04361210e0f58"
+        }
+      ]
+    },
+    "android": {
+      "architectures": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64"
+      ],
+      "minimum": "API 24",
+      "buildType": "Release",
+      "opensslLinkage": "static",
+      "features": {
+        "cxxStandard": 17,
+        "cAbi": true,
+        "libtorrentLinkage": "static",
+        "opensslLinkage": "static",
+        "cxxRuntimeLinkage": "static",
+        "dht": true,
+        "extensions": true,
+        "encryption": true,
+        "logging": false,
+        "deprecatedApis": false,
+        "sharedOutput": true,
+        "minimumTarget": "API 24"
+      },
+      "buildFlags": [
+        "CMAKE_BUILD_TYPE=Release",
+        "SOURCE_DATE_EPOCH=1773440070",
+        "CXX_STANDARD=17",
+        "TORRENT_LINKING_STATIC=1",
+        "BOOST_ALL_NO_LIB=1",
+        "build_tests=OFF",
+        "build_examples=OFF",
+        "build_tools=OFF",
+        "python-bindings=OFF",
+        "deprecated-functions=OFF",
+        "logging=OFF",
+        "encryption=ON",
+        "dht=ON",
+        "-ffile-prefix-map=<source>=.",
+        "-ffile-prefix-map=<build>=build",
+        "ANDROID_PLATFORM=android-24",
+        "ANDROID_STL=c++_static",
+        "-Wl,--exclude-libs,ALL",
+        "llvm-strip=--strip-unneeded"
+      ],
+      "hostTools": {
+        "cmake": "cmake version 3.29.3 | CMake suite maintained and supported by Kitware (kitware.com/cmake).",
+        "androidNdk": "29.0.13113456",
+        "clang": "Android (13065274, based on r547379) clang version 20.0.0 (https://android.googlesource.com/toolchain/llvm-project b718bcaf8c198c82f3021447d943401e3ab5bd54) | Target: x86_64-w64-windows-gnu",
+        "git": "git version 2.45.1.windows.1",
+        "posixPerl": "msys v5.38.2"
+      },
+      "buildProvenance": {
+        "schemaVersion": 1,
+        "target": "android",
+        "artifactInputs": {
+          "schemaVersion": 2,
+          "builderVersion": "2.0.0",
+          "nativeAbi": 2,
+          "sourceDateEpoch": 1773440070,
+          "dependencies": {
+            "libtorrent": {
+              "version": "2.0.12",
+              "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
+              "patches": []
+            },
+            "boost": {
+              "version": "1.91.0",
+              "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
+              "patches": [
+                {
+                  "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
+                  "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
+                }
+              ]
+            },
+            "openssl": {
+              "version": "3.5.8",
+              "archiveSha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2",
+              "patches": []
+            }
+          },
+          "assets": {
+            "mozilla-ca-bundle": {
+              "version": "2026-08-13",
+              "sha256": "f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9"
+            }
+          },
+          "auxiliaryTools": {
+            "nasm-windows-x64": {
+              "version": "2.16.03",
+              "archiveSha256": "3ee4782247bcb874378d02f7eab4e294a84d3d15f3f6ee2de2f47a46aa7226e6"
+            },
+            "perl-windows-x64": {
+              "version": "5.40.2.1",
+              "archiveSha256": "7707700d5ad027773b775134fe48cd9610abf221433fcfb68c8eb0ec9c6fde8c"
+            }
+          },
+          "toolchains": {
+            "androidNdk": "29.0.13113456",
+            "androidApi": 24,
+            "windowsMinimum": "10.0",
+            "iosMinimum": "15.0",
+            "macosMinimum": "12.0"
+          }
+        },
+        "recipe": {
+          "architectures": [
+            "arm64-v8a",
+            "armeabi-v7a",
+            "x86_64"
+          ],
+          "minimum": "API 24",
+          "buildType": "Release",
+          "opensslLinkage": "static",
+          "features": {
+            "cxxStandard": 17,
+            "cAbi": true,
+            "libtorrentLinkage": "static",
+            "opensslLinkage": "static",
+            "cxxRuntimeLinkage": "static",
+            "dht": true,
+            "extensions": true,
+            "encryption": true,
+            "logging": false,
+            "deprecatedApis": false,
+            "sharedOutput": true,
+            "minimumTarget": "API 24"
+          },
+          "buildFlags": [
+            "CMAKE_BUILD_TYPE=Release",
+            "SOURCE_DATE_EPOCH=1773440070",
+            "CXX_STANDARD=17",
+            "TORRENT_LINKING_STATIC=1",
+            "BOOST_ALL_NO_LIB=1",
+            "build_tests=OFF",
+            "build_examples=OFF",
+            "build_tools=OFF",
+            "python-bindings=OFF",
+            "deprecated-functions=OFF",
+            "logging=OFF",
+            "encryption=ON",
+            "dht=ON",
+            "-ffile-prefix-map=<source>=.",
+            "-ffile-prefix-map=<build>=build",
+            "ANDROID_PLATFORM=android-24",
+            "ANDROID_STL=c++_static",
+            "-Wl,--exclude-libs,ALL",
+            "llvm-strip=--strip-unneeded"
+          ]
+        },
+        "nativeInputs": {
+          "schemaVersion": 1,
+          "normalization": "utf8-lf-v1",
+          "target": "android",
+          "files": [
+            {
+              "path": "native/CMakeLists.txt",
+              "size": 11948,
+              "sha256": "c611e2a4bd37f270afcee83208397a4bd94b4d500530bd2d36dda719fff6a739"
+            },
+            {
+              "path": "native/dependencies.lock.json",
+              "size": 2096,
+              "sha256": "5361966a3d2404c27aaa6034f2fbe6a76d1fae4f209fb822bfc2e5490303e931"
+            },
+            {
+              "path": "native/include/module.modulemap",
+              "size": 77,
+              "sha256": "e92739ad664d5d0bed0df00d4ff08b6a7c5df42cd52a561461c2f7b2357e12c5"
+            },
+            {
+              "path": "native/include/simple_torrent_native.h",
+              "size": 7878,
+              "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
+            },
+            {
+              "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
+              "size": 712,
+              "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
+            },
+            {
+              "path": "native/platform/android/simple_torrent_android.cpp",
+              "size": 29138,
+              "sha256": "b2e8eaf50a160b35520020b0d4c1abf69c783ddfbcc35902024258006f6218a5"
+            },
+            {
+              "path": "native/src/embedded_ca_bundle.cpp",
+              "size": 581,
+              "sha256": "5806afb0d977a74df3489911c9ff39f85619b7c6893407622927e54f7a3f708f"
+            },
+            {
+              "path": "native/src/simple_torrent_native.cpp",
+              "size": 18617,
+              "sha256": "543168e46c26cc02933e6fc8b3b929be565dca704de50c692336e255915b54f2"
+            },
+            {
+              "path": "native/src/torrent_manager.cpp",
+              "size": 27072,
+              "sha256": "5acff13a03b1d3e4347acf8ea1867bacc1c9434c0a88760f8a46d627b9919606"
+            },
+            {
+              "path": "native/src/torrent_manager.hpp",
+              "size": 5755,
+              "sha256": "73f06e7eae685b20ae99653df1116ed66bd11e0c6cbdc8d47edd2db5b1ce6de6"
+            },
+            {
+              "path": "native/test/session_suspension_test.cpp",
+              "size": 5525,
+              "sha256": "5ba69f6f74ccc576ba24187e0e0368ce320dabe15b4340f4b7490dc8021a4eba"
+            },
+            {
+              "path": "tool/native.dart",
+              "size": 888,
+              "sha256": "20a8d92a09aff255f4e59398e83b2086adf590d545bd2a8a96de76e119425aa3"
+            },
+            {
+              "path": "tool/native.ps1",
+              "size": 1464,
+              "sha256": "b2fa2a58ad3b65a4fa96785d5f11a7e33d256b6c1f0dffc00156f453fd927e8a"
+            },
+            {
+              "path": "tool/native.sh",
+              "size": 1181,
+              "sha256": "5a5a169fa9fa4ee2b1975976d1b81c6143ad1618ff70810a0229d4062dd4771b"
+            },
+            {
+              "path": "tool/src/native_builder.dart",
+              "size": 119117,
+              "sha256": "1eb8d73029a608387f8c7c64336a915b9b2777400b87ced3efa9aaf8cbbdee9a"
+            }
+          ],
+          "sha256": "b82d5203de64adfa46f1be3ed9875a4d214421a58082c1d01e8c8bf4c4d9ba62"
+        }
+      },
+      "files": [
+        {
+          "path": "packages/simple_torrent_android/android/src/main/cpp/include/simple_torrent_native.h",
+          "size": 7878,
+          "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
+        },
+        {
+          "path": "packages/simple_torrent_android/android/src/main/jniLibs/arm64-v8a/libsimple_torrent_native.so",
+          "size": 12067592,
+          "sha256": "20fde90f0846ce73a2417c71df4516ffa4bf2ba3b42d80c0c1a91cb41a57b888"
+        },
+        {
+          "path": "packages/simple_torrent_android/android/src/main/jniLibs/armeabi-v7a/libsimple_torrent_native.so",
+          "size": 8617836,
+          "sha256": "6eec212e1a5ef42cdf30ada1631b0863bd59e59f21d9d3d64e157165049d795c"
+        },
+        {
+          "path": "packages/simple_torrent_android/android/src/main/jniLibs/x86_64/libsimple_torrent_native.so",
+          "size": 12235016,
+          "sha256": "dbe6623ac01fd5b8e8e808862b7ca54d60e994712bfd6d63e6afaa421076a906"
+        }
+      ]
+    }
+  }
+}

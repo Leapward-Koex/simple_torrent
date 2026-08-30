@@ -1,9 +1,0 @@
-using clang : android
-    : "C:/Users/ScottM/AppData/Local/Android/Sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android24-clang++.cmd"
-    : <compileflags>"-fPIC"
-      <linkflags>"-fPIC"
-      <arch>arm           <address-model>64
-      <abi>aapcs          <binary-format>elf
-      <target-os>android
-      <archiver>"C:/Users/ScottM/AppData/Local/Android/Sdk/ndk/29.0.13113456/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-ar.exe"
-;

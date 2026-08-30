@@ -1,4 +1,19 @@
 # Changelog
+
+## [2.0.0] - 2026-08-30
+
+- Converted the repository to a Dart Pub workspace with six independently
+  publishable federated packages under `packages/` and one shared lockfile.
+- Replaced duplicated platform-native trees with a manager-owned C ABI and
+  pinned, checksummed libtorrent 2.0.12, Boost 1.91.0, and OpenSSL 3.5.8 builds.
+- Added the table-driven `tool/native.ps1` and `tool/native.sh` maintainer flow,
+  offline/cache controls, artifact verification, and manifest generation.
+- Standardized the method-channel contract, configuration validation, typed
+  errors, v1/v2 hashes, file metadata, and the terminal-driven sample test.
+- Added explicit session-wide transfer suspension for parent-owned metered and
+  connectivity policy, independently of per-torrent pause state.
+- Removed the unsupported Linux implementation and legacy build layouts.
+
 ## [1.0.0] 
 
 ### Added

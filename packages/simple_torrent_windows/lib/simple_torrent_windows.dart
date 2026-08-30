@@ -1,5 +1,4 @@
 import 'package:simple_torrent_platform_interface/simple_torrent_platform_interface.dart';
-import 'simple_torrent_windows_method_channel.dart';
 
 /// The Windows implementation of [SimpleTorrentPlatform].
 ///
@@ -7,6 +6,6 @@ import 'simple_torrent_windows_method_channel.dart';
 class SimpleTorrentWindows {
   /// Registers this class as the platform implementation for Windows.
   static void registerWith() {
-    SimpleTorrentPlatform.instance = SimpleTorrentWindowsMethodChannel();
+    SimpleTorrentPlatform.instance = MethodChannelSimpleTorrent();
   }
 }

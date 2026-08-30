@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "sourceDateEpoch": 1773440070,
+  "dependencies": {
+    "libtorrent": {
+      "version": "2.0.12",
+      "archive": "libtorrent-rasterbar-2.0.12.tar.gz",
+      "url": "https://github.com/arvidn/libtorrent/releases/download/v2.0.12/libtorrent-rasterbar-2.0.12.tar.gz",
+      "sha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
+      "license": "BSD-3-Clause"
+    },
+    "boost": {
+      "version": "1.91.0",
+      "archive": "boost_1_91_0.tar.gz",
+      "url": "https://archives.boost.io/release/1.91.0/source/boost_1_91_0.tar.gz",
+      "sha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
+      "license": "BSL-1.0"
+    },
+    "openssl": {
+      "version": "3.5.8",
+      "archive": "openssl-3.5.8.tar.gz",
+      "url": "https://www.openssl.org/source/openssl-3.5.8.tar.gz",
+      "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2",
+      "license": "Apache-2.0"
+    }
+  },
+  "assets": {
+    "mozilla-ca-bundle": {
+      "version": "2026-08-13",
+      "archive": "cacert-2026-08-13.pem",
+      "url": "https://curl.se/ca/cacert-2026-08-13.pem",
+      "sha256": "f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9",
+      "license": "MPL-2.0"
+    }
+  },
+  "tools": {
+    "nasm-windows-x64": {
+      "version": "2.16.03",
+      "archive": "nasm-2.16.03-win64.zip",
+      "url": "https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/win64/nasm-2.16.03-win64.zip",
+      "sha256": "3ee4782247bcb874378d02f7eab4e294a84d3d15f3f6ee2de2f47a46aa7226e6"
+    },
+    "perl-windows-x64": {
+      "version": "5.40.2.1",
+      "archive": "strawberry-perl-5.40.2.1-64bit-portable.zip",
+      "url": "https://github.com/StrawberryPerl/Perl-Dist-Strawberry/releases/download/SP_54021_64bit_UCRT/strawberry-perl-5.40.2.1-64bit-portable.zip",
+      "sha256": "7707700d5ad027773b775134fe48cd9610abf221433fcfb68c8eb0ec9c6fde8c"
+    }
+  },
+  "toolchains": {
+    "androidNdk": "29.0.13113456",
+    "androidApi": 24,
+    "windowsMinimum": "10.0",
+    "iosMinimum": "15.0",
+    "macosMinimum": "12.0"
+  }
+}

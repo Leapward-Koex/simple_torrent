@@ -1,19 +1,10 @@
-# Windows libraries in federated package
-packages/simple_torrent_windows/shared/lib/windows/lib/*.lib filter=lfs diff=lfs merge=lfs -text
-packages/simple_torrent_windows/shared/lib/windows/lib/Debug/*.lib filter=lfs diff=lfs merge=lfs -text
-
-# Android shared libraries in federated package
+# Bundled release artifacts for the federated platform packages.
 packages/simple_torrent_android/android/src/main/jniLibs/**/*.so filter=lfs diff=lfs merge=lfs -text
-# iOS/macOS static libraries in federated packages
-packages/simple_torrent_ios/shared/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
-packages/simple_torrent_macos/shared/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
-# General binary file patterns for any future additions
-packages/*/shared/lib/**/*.lib filter=lfs diff=lfs merge=lfs -text
-packages/*/shared/lib/**/*.a filter=lfs diff=lfs merge=lfs -text
-packages/*/shared/lib/**/*.so filter=lfs diff=lfs merge=lfs -text
-packages/*/shared/lib/**/*.dylib filter=lfs diff=lfs merge=lfs -text
-packages/*/android/src/main/jniLibs/**/*.so filter=lfs diff=lfs merge=lfs -text
-*.lib filter=lfs diff=lfs merge=lfs -text
-*.so filter=lfs diff=lfs merge=lfs -text
-*.a filter=lfs diff=lfs merge=lfs -text
-*.dylib filter=lfs diff=lfs merge=lfs -text
+packages/simple_torrent_windows/windows/lib/**/*.dll filter=lfs diff=lfs merge=lfs -text
+packages/simple_torrent_windows/windows/lib/**/*.lib filter=lfs diff=lfs merge=lfs -text
+packages/simple_torrent_ios/ios/Frameworks/**/*.a filter=lfs diff=lfs merge=lfs -text
+packages/simple_torrent_macos/macos/Frameworks/**/*.a filter=lfs diff=lfs merge=lfs -text
+
+# Preserve shell scripts with Unix line endings on every maintainer host.
+*.sh text eol=lf
+/native/patches/*.patch text eol=lf

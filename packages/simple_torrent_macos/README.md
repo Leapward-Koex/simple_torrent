@@ -1,46 +1,43 @@
 # simple_torrent_macos
 
-macOS implementation of the `simple_torrent` plugin.
+Endorsed macOS implementation of
+[`simple_torrent`](https://pub.dev/packages/simple_torrent).
 
-## Overview
+Consumers should depend on `simple_torrent`; Flutter selects this package
+automatically. It supports macOS 12 or newer on Apple Silicon and Intel Macs.
+The package ships a static `arm64`/`x86_64` XCFramework containing the pinned
+native dependencies.
+The XCFramework also embeds a pinned Mozilla CA extract, materialized into the
+app's private Application Support directory for OpenSSL certificate checks.
 
-This package provides the macOS implementation for the `simple_torrent` federated plugin, enabling torrent handling functionality on macOS. It includes native macOS integration with libtorrent-rasterbar libraries compiled for both Intel and Apple Silicon Macs.
+Swift Package Manager is the primary integration. A CocoaPods fallback is also
+included, and neither integration uses Homebrew or developer-specific paths.
+Enable Flutter's SwiftPM integration once on the macOS build host with
+`flutter config --enable-swift-package-manager`. If it is disabled, Flutter
+uses the included podspec fallback.
 
-## Features
+The adapter implements the session-wide `setTransfersSuspended` policy and
+the `areTransfersSuspended` query. Suspending transfers pauses network traffic
+without changing each torrent's explicit lifecycle state, so connectivity and
+metered-network policies can be applied and later reversed as one operation.
 
-- Native macOS torrent library integration
-- Universal binary support (Intel and Apple Silicon)
-- Efficient native memory management
-- macOS-specific optimizations
-- CocoaPods integration
+Maintainers generate and verify artifacts on macOS from the repository root:
 
-## Platform Support
+```sh
+./tool/native.sh build macos
+./tool/native.sh verify macos
+flutter config --enable-swift-package-manager
+cd packages/simple_torrent/example
+flutter build macos
+cd ../../simple_torrent_macos
+dart pub publish --dry-run
+```
 
-- macOS 10.14+
-- Intel-based Macs
-- Apple Silicon Macs (M1, M2, M3, etc.)
+Do not publish if the dry-run archive does not contain
+`macos/Frameworks/SimpleTorrentNative.xcframework`; generated Apple artifacts
+must be staged and verified on macOS first.
 
-## Dependencies
+## License
 
-This package depends on:
-- `simple_torrent_platform_interface` - Provides the common interface
-- Flutter SDK
-
-## Usage
-
-This package is automatically included when you add `simple_torrent` to your Flutter project and run on macOS. You should not need to manually add this package to your dependencies.
-
-## Native Libraries
-
-Includes pre-compiled libtorrent-rasterbar and Boost libraries optimized for macOS:
-- libtorrent 2.x
-- Boost 1.84.0
-- Built with Xcode and macOS SDK
-- Universal binaries supporting both architectures
-
-## Architecture Support
-
-- x86_64 (Intel Macs)
-- arm64 (Apple Silicon Macs)
-
-For more information about the parent plugin, see the [simple_torrent](https://pub.dev/packages/simple_torrent) package.
+BSD 3-Clause. See [LICENSE](LICENSE). Bundled dependency terms are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

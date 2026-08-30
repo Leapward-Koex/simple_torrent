@@ -1,23 +1,28 @@
 name: simple_torrent_ios
-description: iOS implementation of the simple_torrent plugin
-version: 1.0.0
+description: iOS implementation of simple_torrent, distributed with a bundled static native XCFramework.
+version: 2.0.0
 homepage: https://github.com/Leapward-Koex/simple_torrent
 repository: https://github.com/Leapward-Koex/simple_torrent/tree/master/packages/simple_torrent_ios
+issue_tracker: https://github.com/Leapward-Koex/simple_torrent/issues
+topics:
+  - bittorrent
+  - torrent
+  - ios
 
 environment:
-  sdk: ^3.7.2
-  flutter: '>=3.3.0'
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.44.0'
+
+resolution: workspace
 
 dependencies:
   flutter:
     sdk: flutter
-  simple_torrent_platform_interface:
-    path: ../simple_torrent_platform_interface
+  simple_torrent_platform_interface: ^2.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
 
 flutter:
   plugin:

@@ -1,29 +1,39 @@
 # simple_torrent_android
 
-Android implementation of the simple_torrent plugin.
+Endorsed Android implementation of
+[`simple_torrent`](https://pub.dev/packages/simple_torrent).
 
-This package contains the Android-specific implementation and all required Android libtorrent binaries.
+Consumers should depend on `simple_torrent`; Flutter selects this package
+automatically. It supports Android API 24 or newer on `arm64-v8a`,
+`armeabi-v7a`, and `x86_64`. Release artifacts bundle libtorrent, Boost, static
+OpenSSL, and the C++ runtime, so consumers do not install an NDK or native
+dependencies.
 
-## Usage
+The adapter implements the session-wide `setTransfersSuspended` policy and
+`areTransfersSuspended` query. Parent applications can atomically gate network
+traffic for metered, roaming, offline, or background-restricted conditions
+without changing any torrent's explicit pause state.
 
-This package is automatically included when you add `simple_torrent` to your Flutter project and your project targets Android.
+Maintainers build or verify the pinned artifacts from the repository root:
 
-## Platform Requirements
+```powershell
+./tool/native.ps1 build android
+./tool/native.ps1 verify android
+```
 
-- Android API level 21 (Android 5.0) or later
-- NDK r25c or later
-- Gradle 8.0 or later
+The build tooling pins Android NDK `29.0.13113456` and downloads all source
+dependencies into the ignored repository cache.
 
-## Libraries Included
+Passing `--arch` makes the requested architectures the complete staged ABI set.
+The tool removes only the known native library for each unrequested supported
+ABI before it writes the manifest. Build without `--arch` to stage all three
+release ABIs again.
 
-- libtorrent-rasterbar (shared libraries)
-- Boost libraries (shared libraries)
-- Platform-specific binaries for arm64-v8a, armeabi-v7a, and x86_64 architectures
+The Android manifest entry retains its own dependency, recipe, and canonical
+native-source fingerprint. Rebuilding another platform does not relabel the
+Android binaries with newer inputs.
 
-## Build Scripts
+## License
 
-This package includes build scripts for compiling the native libraries:
-- `build_android_arm64-v8a.*` - Build for ARM64 devices
-- `build_android_armabi-v7a.*` - Build for ARM32 devices  
-- `build_android_x86_64.*` - Build for x86_64 devices (emulators)
-- `build_android_universal.*` - Build for all architectures
+BSD 3-Clause. See [LICENSE](LICENSE). Bundled dependency terms are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
