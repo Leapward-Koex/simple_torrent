@@ -24,8 +24,9 @@ migrate_working_dir/
 #.vscode/
 
 # Flutter/Dart/Pub related
-# Libraries should not include pubspec.lock, per https://dart.dev/guides/libraries/private-files#pubspeclock.
-/pubspec.lock
+# The workspace owns the only Dart/Flutter lockfile. Package-local lockfiles
+# remain ignored so every member resolves against the same dependency graph.
+/packages/**/pubspec.lock
 **/doc/api/
 .dart_tool/
 .flutter-plugins
@@ -33,3 +34,7 @@ migrate_working_dir/
 build/
 
 /build_scripts/toolchains/
+
+# Maintainer-only native source/download cache. Release artifacts are staged
+# into the platform packages and tracked through Git LFS.
+.native-cache/

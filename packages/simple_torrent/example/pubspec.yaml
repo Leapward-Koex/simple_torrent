@@ -1,0 +1,28 @@
+name: simple_torrent_example
+description: Demonstrates and integration-tests the simple_torrent federated plugin.
+publish_to: none
+
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.44.0"
+
+resolution: workspace
+
+dependencies:
+  file_picker: ^10.3.3
+  flutter:
+    sdk: flutter
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  simple_torrent: ^2.0.0
+
+dev_dependencies:
+  crypto: ^3.0.6
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

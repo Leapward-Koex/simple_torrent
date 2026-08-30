@@ -1,0 +1,34 @@
+name: simple_torrent_android
+description: Android implementation of simple_torrent, with bundled libtorrent and OpenSSL native binaries.
+version: 2.0.0
+homepage: https://github.com/Leapward-Koex/simple_torrent
+repository: https://github.com/Leapward-Koex/simple_torrent/tree/master/packages/simple_torrent_android
+issue_tracker: https://github.com/Leapward-Koex/simple_torrent/issues
+topics:
+  - bittorrent
+  - torrent
+  - android
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.44.0'
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  simple_torrent_platform_interface: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    implements: simple_torrent
+    platforms:
+      android:
+        package: com.leapwardkoex.simple_torrent.simple_torrent
+        pluginClass: SimpleTorrentPlugin
+        dartPluginClass: SimpleTorrentAndroid

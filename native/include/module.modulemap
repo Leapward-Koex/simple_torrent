@@ -1,0 +1,4 @@
+module SimpleTorrentNative {
+  header "simple_torrent_native.h"
+  export *
+}

@@ -1,0 +1,33 @@
+name: simple_torrent_windows
+description: Windows implementation of simple_torrent, with a bundled libtorrent and OpenSSL native DLL.
+version: 2.0.0
+homepage: https://github.com/Leapward-Koex/simple_torrent
+repository: https://github.com/Leapward-Koex/simple_torrent/tree/master/packages/simple_torrent_windows
+issue_tracker: https://github.com/Leapward-Koex/simple_torrent/issues
+topics:
+  - bittorrent
+  - torrent
+  - windows
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.44.0'
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  simple_torrent_platform_interface: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    implements: simple_torrent
+    platforms:
+      windows:
+        pluginClass: SimpleTorrentPluginCApi
+        dartPluginClass: SimpleTorrentWindows

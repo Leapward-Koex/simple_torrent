@@ -1,0 +1,10 @@
+Mozilla CA certificate bundle notice
+====================================
+
+This artifact embeds the unmodified Mozilla CA certificate store converted to
+PEM by curl's CA Extract service.
+
+  Version: 2026-08-13
+  Source: https://curl.se/ca/cacert-2026-08-13.pem
+  SHA-256: f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9
+  License: Mozilla Public License 2.0 (https://www.mozilla.org/MPL/2.0/)
