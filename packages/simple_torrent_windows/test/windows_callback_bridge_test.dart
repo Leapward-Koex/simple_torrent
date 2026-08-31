@@ -7,9 +7,8 @@ void main() {
     final packageRoot = Directory('windows').existsSync()
         ? Directory.current
         : Directory('packages/simple_torrent_windows');
-    final source = File(
-      '${packageRoot.path}/windows/simple_torrent_plugin.cpp',
-    ).readAsStringSync();
+    final source = File('${packageRoot.path}/windows/simple_torrent_plugin.cpp')
+        .readAsStringSync();
 
     expect(
       source,
@@ -49,9 +48,8 @@ void main() {
     final packageRoot = Directory('windows').existsSync()
         ? Directory.current
         : Directory('packages/simple_torrent_windows');
-    final source = File(
-      '${packageRoot.path}/windows/simple_torrent_plugin.cpp',
-    ).readAsStringSync();
+    final source = File('${packageRoot.path}/windows/simple_torrent_plugin.cpp')
+        .readAsStringSync();
 
     expect(source, contains('metadata_buffer_.insert_or_assign'));
     expect(source, contains('while (!metadata_buffer_.empty())'));
@@ -62,12 +60,10 @@ void main() {
     final packageRoot = Directory('windows').existsSync()
         ? Directory.current
         : Directory('packages/simple_torrent_windows');
-    final source = File(
-      '${packageRoot.path}/windows/simple_torrent_plugin.cpp',
-    ).readAsStringSync();
-    final header = File(
-      '${packageRoot.path}/windows/simple_torrent_plugin.h',
-    ).readAsStringSync();
+    final source = File('${packageRoot.path}/windows/simple_torrent_plugin.cpp')
+        .readAsStringSync();
+    final header = File('${packageRoot.path}/windows/simple_torrent_plugin.h')
+        .readAsStringSync();
 
     expect(header, contains('std::shared_ptr<NativeState> native_state_'));
     expect(source, contains('QueueFinalise(id, std::move(result))'));
@@ -199,9 +195,8 @@ void main() {
       final source = File(
         '${packageRoot.path}/windows/simple_torrent_plugin.cpp',
       ).readAsStringSync();
-      final header = File(
-        '${packageRoot.path}/windows/simple_torrent_plugin.h',
-      ).readAsStringSync();
+      final header = File('${packageRoot.path}/windows/simple_torrent_plugin.h')
+          .readAsStringSync();
       final cancelStart = source.indexOf(
         'void SimpleTorrentPlugin::CancelPendingFinaliseResults()',
       );

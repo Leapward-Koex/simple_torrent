@@ -26,7 +26,7 @@ class AppPrivateDownloadDirectory implements ExampleDownloadDirectory {
   }
 
   @override
-  Future<String?> pickPath() => FilePicker.platform.getDirectoryPath(
+  Future<String?> pickPath() => FilePicker.getDirectoryPath(
     dialogTitle: 'Choose a torrent download directory',
   );
 }

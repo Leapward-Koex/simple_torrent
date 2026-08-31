@@ -18,9 +18,7 @@ class ExampleKeys {
   static const resumeTransfersButton = ValueKey('resumeTransfersButton');
   static const refreshButton = ValueKey('refresh-button');
   static const initializationStatus = ValueKey('initialization-status');
-  static const transfersSuspendedStatus = ValueKey(
-    'transfersSuspendedStatus',
-  );
+  static const transfersSuspendedStatus = ValueKey('transfersSuspendedStatus');
   static const actionStatus = ValueKey('action-status');
   static const stateStatus = ValueKey('state-status');
   static const progressStatus = ValueKey('progress-status');

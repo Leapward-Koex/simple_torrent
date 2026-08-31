@@ -28,7 +28,7 @@ $dartCandidates = @(
 ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
 if ($dartCandidates.Count -eq 0) {
-    throw 'Dart was not found. Install Flutter 3.44 or newer, or add dart to PATH.'
+    throw 'Dart was not found. Install Flutter 3.47 or newer, or add dart to PATH.'
 }
 # Flutter's bin/dart.bat runs the Flutter bootstrap and may wait on its global
 # startup lock. The builder needs only the Dart VM, so prefer the SDK binary.

@@ -10,9 +10,8 @@ void main() {
     packageRoot = Directory('windows').existsSync()
         ? Directory.current
         : Directory('packages/simple_torrent_windows');
-    source = File(
-      '${packageRoot.path}/windows/simple_torrent_plugin.cpp',
-    ).readAsStringSync();
+    source = File('${packageRoot.path}/windows/simple_torrent_plugin.cpp')
+        .readAsStringSync();
   });
 
   test('setTransfersSuspended strictly decodes and forwards a boolean', () {

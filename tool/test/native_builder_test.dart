@@ -565,9 +565,8 @@ Future<void> main() async {
     File('native/dependencies.lock.json').existsSync(),
     'dependency lock exists',
   );
-  final dependencyLock = await File(
-    'native/dependencies.lock.json',
-  ).readAsString();
+  final dependencyLock = await File('native/dependencies.lock.json')
+      .readAsString();
   _expect(
     dependencyLock.contains('cacert-2026-08-13.pem') &&
         dependencyLock.contains(
@@ -612,9 +611,9 @@ Future<void> main() async {
     ).readAsString()).contains('simple_torrent_embedded_ca_bundle'),
     'C ABI exposes the embedded CA bundle bytes',
   );
-  final builderSource = await File(
+  final builderSource = (await File(
     'tool/src/native_builder.dart',
-  ).readAsString();
+  ).readAsString()).replaceAll('\r\n', '\n');
   for (final expected in [
     '_findGitPosixPerl',
     '_prepareAndroidPerlModules',
@@ -795,10 +794,10 @@ Future<void> main() async {
   final androidJni = await File(
     'native/platform/android/simple_torrent_android.cpp',
   ).readAsString();
-  final androidAdapter = await File(
+  final androidAdapter = (await File(
     'packages/simple_torrent_android/android/src/main/kotlin/'
     'com/leapwardkoex/simple_torrent/simple_torrent/SimpleTorrentPlugin.kt',
-  ).readAsString();
+  ).readAsString()).replaceAll('\r\n', '\n');
   _expect(
     androidJni.contains('jobject QueryResult') &&
         androidJni.contains('MapPut(env, map, "code"') &&

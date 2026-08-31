@@ -4,9 +4,8 @@ import 'dart:io';
 void main() {
   final powershell = File('tool/test-sample.ps1').readAsStringSync();
   final shell = File('tool/test-sample.sh').readAsStringSync();
-  final powershellSuspension = File(
-    'tool/test-suspension.ps1',
-  ).readAsStringSync();
+  final powershellSuspension = File('tool/test-suspension.ps1')
+      .readAsStringSync();
   final shellSuspension = File('tool/test-suspension.sh').readAsStringSync();
 
   final checks = <String, bool>{

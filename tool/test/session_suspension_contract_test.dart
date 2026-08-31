@@ -2,9 +2,8 @@ import 'dart:io';
 
 void main() {
   final manager = File('native/src/torrent_manager.cpp').readAsStringSync();
-  final header = File(
-    'native/include/simple_torrent_native.h',
-  ).readAsStringSync();
+  final header = File('native/include/simple_torrent_native.h')
+      .readAsStringSync();
   final cAbi = File('native/src/simple_torrent_native.cpp').readAsStringSync();
 
   final setter = _between(

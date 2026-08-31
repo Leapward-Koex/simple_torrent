@@ -6,7 +6,7 @@ streams remain, while unsupported configuration and import shims are removed.
 
 ## Requirements and dependencies
 
-- Upgrade to Dart 3.12+ and Flutter 3.44+.
+- Upgrade to Dart 3.13+ and Flutter 3.47+.
 - Depend only on `simple_torrent: ^2.0.0`.
 - Remove direct or path dependencies on `simple_torrent_android`,
   `simple_torrent_ios`, `simple_torrent_macos`, `simple_torrent_windows`, and

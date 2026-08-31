@@ -2672,9 +2672,8 @@ final class NativeBuilder {
     final properties = File(_join(directory.path, 'source.properties'));
     if (!properties.existsSync()) return false;
     final content = await properties.readAsString();
-    return RegExp(
-      r'Pkg\.Revision\s*=\s*' + RegExp.escape(revision),
-    ).hasMatch(content);
+    return RegExp(r'Pkg\.Revision\s*=\s*' + RegExp.escape(revision))
+        .hasMatch(content);
   }
 
   Future<String> _findNinja() async {
@@ -2961,9 +2960,10 @@ final class NativeBuilder {
     );
     _verifyRequiredSuspensionExports(file, exportResult.stdout as String);
     final strings = latin1.decode(bytes, allowInvalid: true).toLowerCase();
-    final dllNames = RegExp(
-      r'[a-z0-9_.-]+\.dll',
-    ).allMatches(strings).map((match) => match.group(0)!).toSet();
+    final dllNames = RegExp(r'[a-z0-9_.-]+\.dll')
+        .allMatches(strings)
+        .map((match) => match.group(0)!)
+        .toSet();
     for (final dllName in dllNames) {
       if (dllName.startsWith('libssl') ||
           dllName.startsWith('libcrypto') ||

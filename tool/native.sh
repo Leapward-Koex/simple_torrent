@@ -29,7 +29,7 @@ for candidate in "${dart_candidates[@]}"; do
   fi
 done
 if [[ -z "$dart_bin" ]]; then
-  echo "Dart was not found. Install Flutter 3.44 or newer, or add dart to PATH." >&2
+  echo "Dart was not found. Install Flutter 3.47 or newer, or add dart to PATH." >&2
   exit 127
 fi
 

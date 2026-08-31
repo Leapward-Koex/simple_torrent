@@ -3,13 +3,13 @@ description: Demonstrates and integration-tests the simple_torrent federated plu
 publish_to: none
 
 environment:
-  sdk: ">=3.12.0 <4.0.0"
-  flutter: ">=3.44.0"
+  sdk: ">=3.13.0 <4.0.0"
+  flutter: ">=3.47.0"
 
 resolution: workspace
 
 dependencies:
-  file_picker: ^10.3.3
+  file_picker: ^12.1.2
   flutter:
     sdk: flutter
   path: ^1.9.1

@@ -3,7 +3,7 @@ description: Development workspace for the simple_torrent federated Flutter plug
 publish_to: none
 
 environment:
-  sdk: '>=3.12.0 <4.0.0'
+  sdk: '>=3.13.0 <4.0.0'
 
 workspace:
   - packages/simple_torrent

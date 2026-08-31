@@ -13,7 +13,7 @@ dependencies:
 Do not add an implementation package directly. This package endorses the
 correct implementation through Flutter's `default_package` mechanism.
 
-Requirements are Dart 3.12+, Flutter 3.44+, Android 24+, iOS 15+, macOS 12+,
+Requirements are Dart 3.13+, Flutter 3.47+, Android 24+, iOS 15+, macOS 12+,
 or Windows 10+ x64.
 
 ## Initialize and start

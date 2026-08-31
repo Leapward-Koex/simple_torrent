@@ -69,8 +69,7 @@ void main() {
         expect(
           Platform.operatingSystem,
           _expectedPlatform,
-          reason:
-              'The selected Flutter device does not match the requested platform.',
+          reason: 'The selected Flutter device does not match the requested platform.',
         );
         await tester.pumpWidget(
           SimpleTorrentExampleApp(controller: controller),
