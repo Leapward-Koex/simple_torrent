@@ -190,7 +190,9 @@ Future<void> main() async {
   ]).toString();
   _expect(
     windowsText.contains('-DSTN_BUILD_TESTS=ON') &&
-        windowsText.contains('version=14.44') &&
+        windowsText.contains('Ninja') &&
+        !windowsText.contains('version=14.44') &&
+        !windowsText.contains('Visual Studio 17 2022') &&
         windowsText.contains('CMAKE_SYSTEM_VERSION=10.0.26100.0') &&
         windowsText.contains('step: ctest') &&
         windowsText.contains('simple_torrent_native_session_suspension_test') &&
@@ -886,10 +888,16 @@ Future<void> main() async {
   ).readAsString()).replaceAll('\r\n', '\n');
   _expect(
     builderSource.contains("'-vcvars_ver=\${toolchains['msvcToolset']}'") &&
-        builderSource.contains("'-winsdk=\${toolchains['windowsSdk']}'") &&
-        builderSource.contains("'[17.0,18.0)'") &&
+        builderSource.contains("'\${toolchains['windowsSdk']}'") &&
+        !builderSource.contains("'-winsdk=\${toolchains['windowsSdk']}'") &&
+        builderSource.contains("'[17.0,19.0)'") &&
+        !builderSource.contains("'version=\${toolchains['msvcToolset']}'") &&
+        RegExp(r"CMAKE_MAKE_PROGRAM=\$\{_unix\(await _findNinja\(\)\)\}")
+                .allMatches(builderSource)
+                .length ==
+            3 &&
         builderSource.contains('_assertPinnedBuildToolchains('),
-    'VS 2022 vcvars and native builds assert the lock-pinned toolchains',
+    'VS vcvars and Ninja native builds assert the lock-pinned toolchains',
   );
   for (final expected in [
     '_findGitPosixPerl',
