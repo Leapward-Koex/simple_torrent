@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Generate, verify, and smoke-test the bundled XCFramework on ARM64 hosted
+  macOS runners; Intel slices are no longer included.
+
 ## 2.0.0 - 2026-08-30
 
 - Raised the minimum supported macOS version to 12.

@@ -24,10 +24,22 @@ param(
     ),
 
     [Parameter(DontShow = $true)]
-    [string]$TestFile = 'integration_test/wired_download_test.dart',
+    [string]$TestFile = $(
+        if ($env:SIMPLE_TORRENT_TEST_FILE) {
+            $env:SIMPLE_TORRENT_TEST_FILE
+        } else {
+            'integration_test/wired_download_test.dart'
+        }
+    ),
 
     [Parameter(DontShow = $true)]
-    [string]$DiagnosticsSuite = 'test-sample'
+    [string]$DiagnosticsSuite = $(
+        if ($env:SIMPLE_TORRENT_DIAGNOSTICS_SUITE) {
+            $env:SIMPLE_TORRENT_DIAGNOSTICS_SUITE
+        } else {
+            'test-sample'
+        }
+    )
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,7 +53,8 @@ $requestedPlatform = if ([string]::IsNullOrWhiteSpace($Platform)) {
 } else {
     $Platform.Trim().ToLowerInvariant()
 }
-$diagnosticPlatform = if ($requestedPlatform -in @('windows', 'android')) {
+$supportedPlatforms = @('windows', 'android', 'macos', 'ios')
+$diagnosticPlatform = if ($requestedPlatform -in $supportedPlatforms) {
     $requestedPlatform
 } else {
     'unknown'
@@ -55,6 +68,7 @@ New-Item -ItemType File -Force -Path $logPath | Out-Null
 
 $script:resolvedTimeoutMinutes = $null
 $script:selectedTargetPlatform = $null
+$script:selectedEmulator = $null
 $script:lastFlutterExitCode = $null
 $script:handlingFailure = $false
 $script:testExecutionMode = 'debug'
@@ -64,7 +78,9 @@ $normalizedBuildMode = if ([string]::IsNullOrWhiteSpace($BuildMode)) {
 } else {
     $BuildMode.Trim().ToLowerInvariant()
 }
-$script:testExecutionMode = if ($normalizedBuildMode -eq 'release') {
+$script:testExecutionMode = if (
+    $normalizedBuildMode -eq 'release' -and $requestedPlatform -ne 'ios'
+) {
     'profile'
 } else {
     'debug'
@@ -82,6 +98,7 @@ function Write-TestResult {
         platform = $requestedPlatform
         device = $DeviceId
         targetPlatform = $script:selectedTargetPlatform
+        emulator = $script:selectedEmulator
         timeoutMinutes = $script:resolvedTimeoutMinutes
         buildMode = $normalizedBuildMode
         testExecutionMode = $script:testExecutionMode
@@ -109,8 +126,8 @@ trap {
     exit 1
 }
 
-if ($requestedPlatform -notin @('windows', 'android')) {
-    throw 'Usage: tool/test-sample.ps1 <windows|android> [-BuildMode debug|release]'
+if ($requestedPlatform -notin $supportedPlatforms) {
+    throw 'Usage: tool/test-sample.ps1 <windows|android|macos|ios> [-BuildMode debug|release]'
 }
 $Platform = $requestedPlatform
 if ($normalizedBuildMode -notin @('debug', 'release')) {
@@ -136,8 +153,13 @@ $useFvm = $false
 if ($env:SIMPLE_TORRENT_FLUTTER) {
     $flutterExecutable = (Resolve-Path -LiteralPath $env:SIMPLE_TORRENT_FLUTTER).Path
 } elseif ($env:FLUTTER_ROOT) {
-    $candidate = Join-Path $env:FLUTTER_ROOT 'bin\flutter.bat'
-    if (Test-Path -LiteralPath $candidate) { $flutterExecutable = $candidate }
+    $candidates = @(
+        (Join-Path $env:FLUTTER_ROOT 'bin\flutter.bat'),
+        (Join-Path $env:FLUTTER_ROOT 'bin\flutter')
+    )
+    $candidate = $candidates | Where-Object { Test-Path -LiteralPath $_ } |
+        Select-Object -First 1
+    if ($candidate) { $flutterExecutable = $candidate }
 } elseif (Get-Command flutter -ErrorAction SilentlyContinue) {
     $flutterExecutable = (Get-Command flutter).Source
 } elseif (Get-Command fvm -ErrorAction SilentlyContinue) {
@@ -161,10 +183,18 @@ function Invoke-Flutter {
     $script:lastFlutterExitCode = $LASTEXITCODE
 }
 
-$deviceJson = (Invoke-Flutter devices --machine 2>&1 | Out-String)
+$deviceStderrPath = Join-Path $diagnosticsRoot 'flutter-devices.stderr.log'
+$deviceJson = (Invoke-Flutter devices --machine 2> $deviceStderrPath | Out-String)
 $deviceExitCode = $script:lastFlutterExitCode
 'Flutter devices:' | Add-Content -LiteralPath $logPath -Encoding utf8
 $deviceJson | Add-Content -LiteralPath $logPath -Encoding utf8
+if ((Test-Path -LiteralPath $deviceStderrPath) -and
+    (Get-Item -LiteralPath $deviceStderrPath).Length -gt 0) {
+    'Flutter device diagnostics:' |
+        Add-Content -LiteralPath $logPath -Encoding utf8
+    Get-Content -Raw -LiteralPath $deviceStderrPath |
+        Add-Content -LiteralPath $logPath -Encoding utf8
+}
 if ($deviceExitCode -ne 0) { throw 'flutter devices failed.' }
 try {
     $devices = @($deviceJson | ConvertFrom-Json)
@@ -180,19 +210,46 @@ if ($DeviceId) {
     if (-not $device) {
         throw "Flutter device '$DeviceId' was not found."
     }
-} elseif ($Platform -eq 'windows') {
-    $device = $devices |
-        Where-Object { $_.isSupported -and $_.targetPlatform -like 'windows-*' } |
-        Sort-Object id |
-        Select-Object -First 1
 } else {
-    $device = $devices |
-        Where-Object { $_.isSupported -and $_.targetPlatform -like 'android-*' } |
-        Sort-Object `
-            @{ Expression = { if ($_.targetPlatform -eq 'android-x64') { 0 } else { 1 } } },
-            @{ Expression = { if ($_.emulator) { 0 } else { 1 } } },
-            id |
-        Select-Object -First 1
+    $device = switch ($Platform) {
+        'windows' {
+            $devices |
+                Where-Object {
+                    $_.isSupported -and $_.targetPlatform -like 'windows-*'
+                } |
+                Sort-Object id |
+                Select-Object -First 1
+        }
+        'android' {
+            $devices |
+                Where-Object {
+                    $_.isSupported -and $_.targetPlatform -like 'android-*'
+                } |
+                Sort-Object `
+                    @{ Expression = { if ($_.targetPlatform -eq 'android-x64') { 0 } else { 1 } } },
+                    @{ Expression = { if ($_.emulator) { 0 } else { 1 } } },
+                    id |
+                Select-Object -First 1
+        }
+        'macos' {
+            $devices |
+                Where-Object {
+                    $_.isSupported -and $_.targetPlatform -eq 'darwin'
+                } |
+                Sort-Object id |
+                Select-Object -First 1
+        }
+        'ios' {
+            $devices |
+                Where-Object {
+                    $_.isSupported -and
+                        $_.targetPlatform -eq 'ios' -and
+                        $_.emulator -eq $true
+                } |
+                Sort-Object id |
+                Select-Object -First 1
+        }
+    }
 }
 if (-not $device) {
     throw "No supported $Platform device is available. Start/connect one or set SIMPLE_TORRENT_DEVICE_ID."
@@ -201,8 +258,17 @@ if (-not $device.isSupported) {
     throw "Flutter device '$($device.id)' is not supported."
 }
 $script:selectedTargetPlatform = [string]$device.targetPlatform
-$expectedTargetPattern = if ($Platform -eq 'windows') { 'windows-*' } else { 'android-*' }
-if ($script:selectedTargetPlatform -notlike $expectedTargetPattern) {
+$script:selectedEmulator = [bool]$device.emulator
+$targetMatches = switch ($Platform) {
+    'windows' { $script:selectedTargetPlatform -like 'windows-*' }
+    'android' { $script:selectedTargetPlatform -like 'android-*' }
+    'macos' { $script:selectedTargetPlatform -eq 'darwin' }
+    'ios' {
+        $script:selectedTargetPlatform -eq 'ios' -and
+            $script:selectedEmulator
+    }
+}
+if (-not $targetMatches) {
     throw "Flutter device '$($device.id)' targets '$($device.targetPlatform)', not $Platform."
 }
 $DeviceId = [string]$device.id
@@ -214,7 +280,9 @@ $defineArguments = @(
     "--dart-define=SIMPLE_TORRENT_KEEP_ON_FAILURE=$($keep.ToString().ToLowerInvariant())",
     "--dart-define=SIMPLE_TORRENT_EXPECTED_PLATFORM=$Platform"
 )
-$testArguments = if ($normalizedBuildMode -eq 'release') {
+$testArguments = if (
+    $normalizedBuildMode -eq 'release' -and $Platform -ne 'ios'
+) {
     # Flutter deliberately rejects non-web `flutter drive --release` because a
     # release app has no VM service for the driver. Build the actual release
     # consumer artifact first, then exercise the same bundled native binary in
@@ -240,12 +308,13 @@ try {
     # as log records rather than terminating PowerShell errors.
     $ErrorActionPreference = 'Continue'
     if ($normalizedBuildMode -eq 'release') {
-        $releaseBuildArguments = if ($Platform -eq 'windows') {
-            @('build', 'windows', '--release')
-        } else {
-            @('build', 'apk', '--release')
+        $releaseBuildArguments = switch ($Platform) {
+            'windows' { @('build', 'windows', '--release') }
+            'android' { @('build', 'apk', '--release') }
+            'macos' { @('build', 'macos', '--release') }
+            'ios' { @('build', 'ios', '--release', '--no-codesign') }
         }
-        "Building actual $Platform Release artifact before the Profile integration run." |
+        "Building actual $Platform Release artifact before the $($script:testExecutionMode) integration run." |
             Tee-Object -FilePath $logPath -Append
         $script:lastFlutterExitCode = $null
         Invoke-Flutter @releaseBuildArguments 2>&1 |

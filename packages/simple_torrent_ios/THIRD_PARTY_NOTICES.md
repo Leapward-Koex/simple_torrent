@@ -3,12 +3,16 @@
 The bundled `simple_torrent_native` release artifact contains statically
 linked code from these projects:
 
-| Component | Pinned version | License |
+<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->
+
+| Component | Pinned version | License (SPDX) |
 | --- | --- | --- |
-| libtorrent | 2.0.12 | BSD 3-Clause |
-| Boost | 1.91.0 | Boost Software License 1.0 |
-| OpenSSL | 3.5.8 LTS | Apache License 2.0 |
-| Mozilla CA certificate bundle (curl extract) | 2026-08-13 | MPL 2.0 |
+| libtorrent | 2.0.12 | BSD-3-Clause |
+| Boost | 1.91.0 | BSL-1.0 |
+| OpenSSL | 3.5.8 | Apache-2.0 |
+| Mozilla CA certificate bundle | 2026-08-13 | MPL-2.0 |
+
+<!-- END GENERATED NATIVE DEPENDENCIES -->
 
 License texts and the Mozilla bundle's source/license reference are distributed
 in `third_party_licenses/`. Exact source URLs, SHA-256 source checksums, build flags, architectures, and artifact

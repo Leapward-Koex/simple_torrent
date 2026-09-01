@@ -47,6 +47,9 @@ metered-network toggle, picker, or external payload:
 .\tool\test-suspension.ps1 android -BuildMode release
 ```
 
+On macOS, use `./tool/test-suspension.sh macos release` for the desktop host or
+`./tool/test-suspension.sh ios release` for a booted iOS Simulator.
+
 It proves that an active transfer becomes quiescent, starts remain accepted
 while globally suspended, global resume does not override an individual torrent
 pause, both payloads resume and verify, and finalisation retains the files.
@@ -54,9 +57,11 @@ Diagnostics are written under `build/test-suspension/`.
 
 Flutter intentionally cannot drive non-web apps in Release mode because they
 have no VM service. A requested `release` run first builds the actual Release
-executable/APK, then runs the same native integration assertions in Profile
-mode. `result.json` reports `releaseArtifactBuilt` and `testExecutionMode`
-separately.
+consumer artifact, then runs the same native integration assertions in a
+supported runtime mode. Windows, Android, and macOS use Profile. iOS first runs
+an unsigned device Release link build, then runs in Debug on the Simulator.
+`result.json` reports `buildMode`, `releaseArtifactBuilt`, and
+`testExecutionMode` separately.
 
 The complete live release test is terminal-driven and kept out of normal test
 runs. From the repository root use:
@@ -74,4 +79,7 @@ directory. Set `SIMPLE_TORRENT_KEEP_ON_FAILURE=true` to preserve that directory
 on failure. Diagnostics and a machine-readable result are written under
 `build/test-sample/`, including when device or toolchain preflight fails. An
 available Android x86_64 target is preferred automatically, and an explicit
-device override must match the requested platform.
+device override must match the requested platform. macOS maps exactly to
+Flutter `targetPlatform: darwin`; iOS maps to `targetPlatform: ios` and rejects
+physical devices. The public WIRED download is kept manual or scheduled rather
+than being required by pull requests.

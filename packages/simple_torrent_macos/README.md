@@ -4,9 +4,8 @@ Endorsed macOS implementation of
 [`simple_torrent`](https://pub.dev/packages/simple_torrent).
 
 Consumers should depend on `simple_torrent`; Flutter selects this package
-automatically. It supports macOS 12 or newer on Apple Silicon and Intel Macs.
-The package ships a static `arm64`/`x86_64` XCFramework containing the pinned
-native dependencies.
+automatically. It supports macOS 12 or newer on Apple Silicon Macs. The package
+ships a static `arm64` XCFramework containing the pinned native dependencies.
 The XCFramework also embeds a pinned Mozilla CA extract, materialized into the
 app's private Application Support directory for OpenSSL certificate checks.
 

@@ -32,35 +32,47 @@ void main() {
     'globally suspends transfers while preserving per-torrent pause state',
     (tester) async {
       final startedAt = DateTime.now().toUtc();
-      final root = await Directory.systemTemp.createTemp(
-        'simple-torrent-suspension-',
-      );
-      final webSeed = await ThrottledWebSeedServer.start();
-      final seedA = webSeed.fixtures[0];
-      final seedB = webSeed.fixtures[1];
       final latest = <int, TorrentStats>{};
-      final statsSubscription = SimpleTorrent.statsStream.listen(
-        (stats) => latest[stats.id] = stats,
-      );
+      Directory? cleanupRoot;
+      ThrottledWebSeedServer? cleanupWebSeed;
+      StreamSubscription<TorrentStats>? cleanupStatsSubscription;
       var initialized = false;
       var passed = false;
       var baselineIds = <int>{};
       final createdIds = <int>[];
-      _event('started', {
-        'root': root.path,
-        'platform': Platform.operatingSystem,
-        'timeoutMinutes': _timeoutMinutes,
-        'payloadBytesEach': seedA.payload.length,
-        'filesEach': seedA.files.length,
-        'fileBytes': ThrottledWebSeedServer.fileLength,
-        'pieceLength': seedA.pieceLength,
-        'piecesEach': 128,
-        'throttleChunkBytes': seedA.chunkSize,
-        'aggregateThrottleBytesPerSecond': 512 * 1024,
-      });
 
       try {
-        expect(_expectedPlatform, anyOf('windows', 'android'));
+        final root = await Directory.systemTemp.createTemp(
+          'simple-torrent-suspension-',
+        );
+        cleanupRoot = root;
+        final webSeed = await ThrottledWebSeedServer.start();
+        cleanupWebSeed = webSeed;
+        final seedA = webSeed.fixtures[0];
+        final seedB = webSeed.fixtures[1];
+        cleanupStatsSubscription = SimpleTorrent.statsStream.listen(
+          (stats) => latest[stats.id] = stats,
+        );
+        _event('started', {
+          'root': root.path,
+          'platform': Platform.operatingSystem,
+          'timeoutMinutes': _timeoutMinutes,
+          'payloadBytesEach': seedA.payload.length,
+          'filesEach': seedA.files.length,
+          'fileBytes': ThrottledWebSeedServer.fileLength,
+          'pieceLength': seedA.pieceLength,
+          'piecesEach': 128,
+          'throttleChunkBytes': seedA.chunkSize,
+          'aggregateThrottleBytesPerSecond': 512 * 1024,
+        });
+
+        expect(
+          _expectedPlatform,
+          anyOf('windows', 'android', 'macos', 'ios'),
+          reason:
+              'Run this test through tool/test-suspension.ps1 or '
+              'tool/test-suspension.sh so its target platform is explicit.',
+        );
         expect(Platform.operatingSystem, _expectedPlatform);
         expect(seedA.payload.length, 8 * 1024 * 1024);
         expect(seedB.payload.length, 8 * 1024 * 1024);
@@ -264,15 +276,32 @@ void main() {
         _event('failed', {
           'error': '$error',
           'stackTrace': '$stackTrace',
-          'root': root.path,
+          'root': cleanupRoot?.path,
         });
         rethrow;
       } finally {
+        Object? cleanupError;
+        StackTrace? cleanupStackTrace;
+        void recordCleanupError(
+          String event,
+          Object error,
+          StackTrace stackTrace, [
+          Map<String, Object?> fields = const {},
+        ]) {
+          cleanupError ??= error;
+          cleanupStackTrace ??= stackTrace;
+          _event(event, {
+            'error': '$error',
+            'stackTrace': '$stackTrace',
+            ...fields,
+          });
+        }
+
         if (initialized) {
           try {
             await SimpleTorrent.setTransfersSuspended(false);
-          } on Object catch (error) {
-            _event('cleanup_resume_failed', {'error': '$error'});
+          } on Object catch (error, stackTrace) {
+            recordCleanupError('cleanup_resume_failed', error, stackTrace);
           }
           try {
             final active = await SimpleTorrent.getActiveTorrentIds();
@@ -281,30 +310,64 @@ void main() {
             )) {
               try {
                 await SimpleTorrent.finalise(id);
-              } on Object catch (error) {
-                _event('cleanup_finalise_failed', {
-                  'id': id,
-                  'error': '$error',
-                });
+              } on Object catch (error, stackTrace) {
+                recordCleanupError(
+                  'cleanup_finalise_failed',
+                  error,
+                  stackTrace,
+                  {'id': id},
+                );
               }
             }
-          } on Object catch (error) {
-            _event('cleanup_query_failed', {'error': '$error'});
+          } on Object catch (error, stackTrace) {
+            recordCleanupError('cleanup_query_failed', error, stackTrace);
           }
         }
-        await statsSubscription.cancel();
-        await webSeed.close();
-        final preserveFiles = !passed && _keepOnFailure;
-        if (!preserveFiles) await _deleteWithRetry(root);
+        final statsSubscription = cleanupStatsSubscription;
+        if (statsSubscription != null) {
+          try {
+            await statsSubscription.cancel();
+          } on Object catch (error, stackTrace) {
+            recordCleanupError(
+              'cleanup_stats_subscription_failed',
+              error,
+              stackTrace,
+            );
+          }
+        }
+        final webSeed = cleanupWebSeed;
+        if (webSeed != null) {
+          try {
+            await webSeed.close();
+          } on Object catch (error, stackTrace) {
+            recordCleanupError('cleanup_web_seed_failed', error, stackTrace);
+          }
+        }
+        final root = cleanupRoot;
+        final preserveFiles = root != null && !passed && _keepOnFailure;
+        if (root != null && !preserveFiles) {
+          try {
+            await _deleteWithRetry(root);
+          } on Object catch (error, stackTrace) {
+            recordCleanupError('cleanup_delete_failed', error, stackTrace);
+          }
+        }
         _event('result', {
           'passed': passed,
           'durationSeconds': DateTime.now()
               .toUtc()
               .difference(startedAt)
               .inSeconds,
-          'root': root.path,
+          'root': root?.path,
           'filesPreserved': preserveFiles,
         });
+        final finalCleanupError = cleanupError;
+        if (passed && finalCleanupError != null) {
+          Error.throwWithStackTrace(
+            finalCleanupError,
+            cleanupStackTrace ?? StackTrace.current,
+          );
+        }
       }
     },
     timeout: Timeout(Duration(minutes: _timeoutMinutes + 2)),

@@ -135,6 +135,55 @@ target's staging roots and requires exact path-set equality with its manifest;
 missing files, unmanifested files, and links are rejected before checksums or
 binary inspection.
 
+### Automated bundle regeneration
+
+`.github/workflows/native-bundle-generate.yml` watches the canonical native
+inputs on `master`. It builds Windows x64 on `windows-2022`, all three Android
+ABIs, and ARM-only iOS/macOS XCFrameworks on separate hosted runners. The
+Windows image retains the pinned VS2022/MSVC 14.44 toolchain; GitHub remapped
+`windows-2025` to Visual Studio 2026 in June 2026. The Apple job uses the
+explicit ARM64 `macos-26` image and Xcode 26.4.1. Toolchain versions are read
+from `native/dependencies.lock.json` and asserted before each build.
+
+Each runner publishes a source-authenticated manifest fragment. The assembly
+job accepts exactly one complete fragment per platform, overlays the staged
+files, validates their paths, sizes, hashes, architectures, and provenance,
+then rebuilds the schema-2 manifest deterministically. Its maintainer commands
+are:
+
+```bash
+./tool/native.sh assemble --source-sha <40-character-sha> \
+  --fragment windows=<windows-manifest> \
+  --fragment android=<android-manifest> \
+  --fragment ios=<ios-manifest> \
+  --fragment macos=<macos-manifest>
+./tool/native.sh sync-metadata
+```
+
+The final generation job permits only bundled binaries/frameworks, copied
+headers, the artifact manifest, and the five generated notice files. It checks
+all generated `.dll`, `.lib`, `.so`, and XCFramework `.a` files through Git
+LFS, then creates or updates `bot/native-bundle`. Identical output is a
+successful no-op.
+
+`.github/workflows/native-bundle-gate.yml` is the stable pull-request gate.
+Non-bundle pull requests pass quickly; bundle pull requests verify and exercise
+Windows, Android x86_64, macOS ARM64, and an explicitly booted iOS ARM64
+Simulator. The public WIRED download remains manual or scheduled.
+
+Repository setup must allow Actions to write contents and create pull requests,
+enable auto-merge, and use an active repository ruleset that requires the
+`native-bundle-gate` check on `master` with **Require branches to be up to date
+before merging** enabled. The publisher fails closed and leaves the PR open if
+that strict ruleset is not observable. Classic branch protection alone is not
+sufficient because the built-in token cannot inspect its required-status-check
+configuration. Smoke jobs check GitHub's prospective merge commit. With the
+built-in `GITHUB_TOKEN`, a maintainer must use the PR's **Approve workflows to
+run** control before the generated PR checks start. If unrelated work reaches
+`master` while the bot PR is awaiting approval, use **Update branch** (or
+manually dispatch a fresh generation) so the strict gate can rerun. Ensure the
+repository's Git LFS quota can hold recurring bundle revisions.
+
 ## Verification
 
 Ordinary checks do not download external torrent payloads:
@@ -151,6 +200,7 @@ dart run tool/test/native_builder_test.dart
 dart run tool/test/lifecycle_serialization_test.dart
 dart run tool/test/session_suspension_contract_test.dart
 dart run tool/test/test_runner_contract_test.dart
+dart run tool/test/native_workflow_contract_test.dart
 ```
 
 Repeat analysis/tests in `simple_torrent_platform_interface` and the example;
@@ -165,14 +215,20 @@ loopback-only webseeds. It does not change the host's metered-network settings:
 .\tool\test-suspension.ps1 android -BuildMode release
 ```
 
-The shell equivalent is `./tool/test-suspension.sh android release`. Logs and a
-JSON result are stored under `build/test-suspension/`. Flutter does not support
-driving a non-web Release app because Release mode has no VM service. For a
-requested `release` run, the script therefore builds the real Release
-executable/APK first, then runs the assertions in supported Profile mode against
-the same bundled release native library. The JSON records both
-`buildMode: release` and `testExecutionMode: profile` so this is never
-misreported as an AOT-driven test.
+On macOS, the shell runner also covers both Apple targets:
+
+```bash
+./tool/test-suspension.sh macos release
+./tool/test-suspension.sh ios release
+```
+
+Logs and a JSON result are stored under `build/test-suspension/`. Flutter does
+not support driving a non-web Release app because Release mode has no VM
+service. A requested `release` run therefore builds the real Release consumer
+artifact first, then runs the assertions in a supported runtime mode. Windows,
+Android, and macOS use Profile; iOS performs the unsigned device Release link
+build and then runs in Debug on an iOS Simulator. The JSON records
+`buildMode`, `releaseArtifactBuilt`, and `testExecutionMode` separately.
 
 The release gate downloads and verifies the complete public WIRED sample using
 Flutter's terminal integration-test tooling:
@@ -191,17 +247,23 @@ Select `debug` or `release` with `-BuildMode` (PowerShell), an optional second
 shell argument, or `SIMPLE_TORRENT_BUILD_MODE`. Release selection follows the
 Release-build-plus-Profile-driver behavior described above.
 Android auto-selection prefers an available x86_64 target, and overrides are
-rejected when they do not match the requested platform. Every invocation,
+rejected when they do not match the requested platform. macOS requires Flutter
+`targetPlatform: darwin`; iOS requires `targetPlatform: ios` and an emulator.
+Every invocation,
 including a preflight failure, stores logs plus a JSON result under
 `build/test-sample/` and exits nonzero on failure.
 
-The Windows and Android artifacts can be built and exercised in this
-repository. Apple build commands, manifests, SwiftPM integration, and CocoaPods
-fallback are validated structurally here; runtime Apple validation must be run
-on macOS with Xcode. Do not publish either Apple implementation package from a
-checkout that has not completed its matching `build` and `verify` commands:
-the final publication dry-run must list the generated XCFramework and its
-checksummed static libraries.
+The public WIRED download remains a manual or scheduled validation and is not a
+pull-request requirement; the pull-request smoke gate uses the deterministic
+loopback suspension test instead.
+
+Windows and Android artifacts can be built and exercised on their matching
+hosts. Apple build, verification, SwiftPM/CocoaPods consumer builds, and runtime
+tests require macOS with Xcode; iOS runtime validation requires a booted
+Simulator. Do not publish either Apple implementation package from a checkout
+that has not completed its matching `build` and `verify` commands: the final
+publication dry-run must list the generated XCFramework and its checksummed
+static libraries.
 
 ## License
 

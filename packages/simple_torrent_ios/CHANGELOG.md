@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Generate, verify, and smoke-test device and Simulator ARM64 slices on ARM64
+  hosted macOS runners; the Simulator x86_64 slice is no longer included.
+
 ## 2.0.0 - 2026-08-30
 
 - Raised the minimum supported iOS version to 15.
