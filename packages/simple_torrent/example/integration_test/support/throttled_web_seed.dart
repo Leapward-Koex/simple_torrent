@@ -23,6 +23,12 @@ final class ThrottledWebSeedServer {
 
   static const chunkDelay = Duration(microseconds: 62500);
 
+  // A client can abandon a response while the native session is being
+  // suspended. Some platform HTTP stacks leave flush() or close() pending in
+  // that case instead of completing with a socket error. Bound those waits so
+  // one dead connection cannot permanently block the aggregate response queue.
+  static const responseIoTimeout = Duration(seconds: 5);
+
   static Future<ThrottledWebSeedServer> start() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final webSeed = ThrottledWebSeedServer._(server);
@@ -154,7 +160,7 @@ final class ThrottledWebSeedServer {
         );
       }
       if (request.method == 'HEAD') {
-        await response.close();
+        await response.close().timeout(responseIoTimeout);
         return;
       }
 
@@ -166,14 +172,12 @@ final class ThrottledWebSeedServer {
           payload.sublist(offset, chunkEnd),
         );
       }
-      await response.close();
+      await response.close().timeout(responseIoTimeout);
     } on Object {
       // Suspending or finalising can abandon an in-flight range.
-      try {
-        await response.close();
-      } on Object {
-        // The peer already closed the socket.
-      }
+      // Do not await shutdown here: on iOS the Future itself can remain
+      // pending after libtorrent has already closed its end of the socket.
+      unawaited(_closeAbandonedResponse(response));
     } finally {
       responseTurn?.complete();
     }
@@ -225,9 +229,17 @@ final class ThrottledWebSeedServer {
   ) async {
     if (_closed) return;
     response.add(chunk);
-    await response.flush();
+    await response.flush().timeout(responseIoTimeout);
     state.bytesServed += chunk.length;
     await Future<void>.delayed(chunkDelay);
+  }
+
+  Future<void> _closeAbandonedResponse(HttpResponse response) async {
+    try {
+      await response.close().timeout(responseIoTimeout);
+    } on Object {
+      // The peer is gone or the platform never acknowledged socket shutdown.
+    }
   }
 }
 

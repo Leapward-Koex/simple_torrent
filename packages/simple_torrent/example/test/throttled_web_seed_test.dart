@@ -174,6 +174,65 @@ void main() {
     expect(untouchedFixture.requestCount, 0);
     expect(untouchedFixture.bytesServed, 0);
   });
+
+  test('an abandoned held response cannot block later requests', () async {
+    final server = await ThrottledWebSeedServer.start();
+    final abandoningClient = HttpClient()..maxConnectionsPerHost = 2;
+    final replacementClient = HttpClient();
+    addTearDown(() async {
+      abandoningClient.close(force: true);
+      replacementClient.close(force: true);
+      await server.close();
+    });
+
+    final fixture = server.fixtures.first;
+    final replacementFixture = server.fixtures.last;
+    final currentResponse = _request(
+      abandoningClient,
+      'GET',
+      fixture.uriForFile(fixture.files.first),
+    );
+    await _waitUntil(
+      () => fixture.activeResponseCount == 1,
+      description: 'the initial response to become active',
+    );
+
+    final boundary = fixture.holdNewResponsesAndWaitForIdle();
+    await currentResponse;
+    await boundary;
+
+    final abandonedRequest = await abandoningClient.openUrl(
+      'GET',
+      fixture.uriForFile(fixture.files[1]),
+    );
+    final abandonedResponse = abandonedRequest.close();
+    unawaited(
+      abandonedResponse.then<void>(
+        (response) => response.drain<void>(),
+        onError: (Object _, StackTrace _) {},
+      ),
+    );
+    await _waitUntil(
+      () => fixture.heldResponseCount == 1,
+      description: 'the response that will be abandoned to reach the hold',
+    );
+
+    abandoningClient.close(force: true);
+    fixture.releaseHeldResponses();
+
+    final replacementFile = replacementFixture.files.first;
+    final replacement = await _request(
+      replacementClient,
+      'GET',
+      replacementFixture.uriForFile(replacementFile),
+    ).timeout(const Duration(seconds: 12));
+    expect(replacement.statusCode, HttpStatus.ok);
+    expect(replacement.body, replacementFile.payload);
+    await _waitUntil(
+      () => fixture.activeResponseCount == 0,
+      description: 'the abandoned response turn to be released',
+    );
+  });
 }
 
 Future<void> _waitUntil(

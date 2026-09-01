@@ -331,10 +331,13 @@ jobs:
             [[ "$(xcodebuild -version | awk 'NR == 1 {print $2}')" == '${{ steps.unix_toolchains.outputs.xcode }}' ]]
           fi
 
-      - name: Enable Flutter Swift Package Manager integration
+      - name: Configure Flutter Apple builds
         if: matrix.platform == 'macos' || matrix.platform == 'ios'
         shell: bash
-        run: flutter config --enable-swift-package-manager
+        run: |
+          set -euo pipefail
+          flutter config --enable-swift-package-manager
+          flutter config --enable-macos-arm64-only
 
       - name: Verify Windows bundle
         if: matrix.platform == 'windows'

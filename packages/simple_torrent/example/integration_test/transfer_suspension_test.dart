@@ -227,6 +227,16 @@ void main() {
           tester,
           description: 'first transfer to resume and seed',
           condition: () => _isComplete(latest[idA]),
+          diagnostics: () => {
+            'id': idA,
+            'state': latest[idA]?.state.name,
+            'pieces': latest[idA]?.pieces,
+            'piecesTotal': latest[idA]?.piecesTotal,
+            'bytesServed': seedA.bytesServed,
+            'getRequestCount': seedA.getRequestCount,
+            'activeResponseCount': seedA.activeResponseCount,
+            'heldResponseCount': seedA.heldResponseCount,
+          },
         );
         expect(await SimpleTorrent.getState(idB), TorrentState.paused);
         expect(seedB.bytesServed, bBytesBeforeStart);
@@ -246,6 +256,16 @@ void main() {
           tester,
           description: 'second transfer to resume and seed',
           condition: () => _isComplete(latest[idB]),
+          diagnostics: () => {
+            'id': idB,
+            'state': latest[idB]?.state.name,
+            'pieces': latest[idB]?.pieces,
+            'piecesTotal': latest[idB]?.piecesTotal,
+            'bytesServed': seedB.bytesServed,
+            'getRequestCount': seedB.getRequestCount,
+            'activeResponseCount': seedB.activeResponseCount,
+            'heldResponseCount': seedB.heldResponseCount,
+          },
         );
         _event('second_transfer_completed', {
           'id': idB,
@@ -446,18 +466,25 @@ Future<void> _waitFor(
   WidgetTester tester, {
   required String description,
   required bool Function() condition,
+  Map<String, Object?> Function()? diagnostics,
 }) async {
   final timeout = Duration(minutes: _timeoutMinutes);
   final stopwatch = Stopwatch()..start();
   var nextDiagnostic = const Duration(seconds: 10);
   while (!condition()) {
     if (stopwatch.elapsed >= timeout) {
+      _event('wait_timed_out', {
+        'for': description,
+        'elapsedSeconds': stopwatch.elapsed.inSeconds,
+        ...?diagnostics?.call(),
+      });
       fail('Timed out after ${timeout.inSeconds}s waiting for $description');
     }
     if (stopwatch.elapsed >= nextDiagnostic) {
       _event('waiting', {
         'for': description,
         'elapsedSeconds': stopwatch.elapsed.inSeconds,
+        ...?diagnostics?.call(),
       });
       nextDiagnostic += const Duration(seconds: 10);
     }
