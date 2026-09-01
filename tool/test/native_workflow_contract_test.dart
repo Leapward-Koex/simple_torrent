@@ -119,6 +119,108 @@ void main() {
         generation.contains('runs-on: ubuntu-24.04') &&
         generation.contains('runs-on: macos-26') &&
         !generation.contains('runs-on: windows-2025'),
+    'Flutter is bootstrapped before every machine-readable version query':
+        _occurrences(generation, 'flutter --version --machine') == 3 &&
+        _occurrences(gate, 'flutter --version --machine') == 2 &&
+        _occurrences(generation, 'flutter --version | Out-Null') == 1 &&
+        _occurrences(gate, 'flutter --version | Out-Null') == 1 &&
+        _occurrences(generation, 'flutter --version >/dev/null') == 2 &&
+        _occurrences(gate, 'flutter --version >/dev/null') == 1 &&
+        _orderedPairOccurrences(
+              generation,
+              'flutter --version | Out-Null',
+              r'$flutterOutput = flutter --version --machine | Out-String',
+            ) ==
+            1 &&
+        _orderedPairOccurrences(
+              gate,
+              'flutter --version | Out-Null',
+              r'$flutterOutput = flutter --version --machine | Out-String',
+            ) ==
+            1 &&
+        _orderedPairOccurrences(
+              generation,
+              'flutter --version >/dev/null',
+              r'flutter_json="$(flutter --version --machine)"',
+            ) ==
+            2 &&
+        _orderedPairOccurrences(
+              gate,
+              'flutter --version >/dev/null',
+              r'flutter_json="$(flutter --version --machine)"',
+            ) ==
+            1 &&
+        _occurrences(
+              generation,
+              r'$flutterOutput = flutter --version --machine | Out-String',
+            ) ==
+            1 &&
+        _occurrences(
+              gate,
+              r'$flutterOutput = flutter --version --machine | Out-String',
+            ) ==
+            1 &&
+        _occurrences(generation, r"$jsonStart = $flutterOutput.IndexOf('{')") ==
+            1 &&
+        _occurrences(gate, r"$jsonStart = $flutterOutput.IndexOf('{')") == 1 &&
+        _occurrences(
+              generation,
+              r'$flutterOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)',
+            ) ==
+            1 &&
+        _occurrences(
+              gate,
+              r'$flutterOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)',
+            ) ==
+            1 &&
+        _occurrences(
+              generation,
+              r'flutter_json="$(flutter --version --machine)"',
+            ) ==
+            2 &&
+        _occurrences(gate, r'flutter_json="$(flutter --version --machine)"') ==
+            1 &&
+        !generation.contains(
+          'flutter --version --machine | ConvertFrom-Json',
+        ) &&
+        !gate.contains('flutter --version --machine | ConvertFrom-Json') &&
+        !generation.contains(
+          r'flutter --version --machine | jq -r .frameworkVersion',
+        ) &&
+        !gate.contains(
+          r'flutter --version --machine | jq -r .frameworkVersion',
+        ),
+    'Android NDK assertions prefer an exact base revision':
+        _occurrences(generation, 'key == "Pkg.BaseRevision"') == 1 &&
+        _occurrences(gate, 'key == "Pkg.BaseRevision"') == 1 &&
+        _occurrences(generation, 'key == "Pkg.Revision"') == 1 &&
+        _occurrences(gate, 'key == "Pkg.Revision"') == 1 &&
+        _occurrences(generation, 'if (base_count == 1) {') == 1 &&
+        _occurrences(gate, 'if (base_count == 1) {') == 1 &&
+        _occurrences(generation, 'if (invalid || base_count > 1') == 1 &&
+        _occurrences(gate, 'if (invalid || base_count > 1') == 1 &&
+        _occurrences(generation, 'raw ~ /^Pkg[.]BaseRevision') == 1 &&
+        _occurrences(gate, 'raw ~ /^Pkg[.]BaseRevision') == 1 &&
+        _occurrences(generation, 'NF != 2 || base_count != 1') == 1 &&
+        _occurrences(gate, 'NF != 2 || base_count != 1') == 1 &&
+        _occurrences(
+              generation,
+              'missing, duplicate, or malformed revision metadata',
+            ) ==
+            1 &&
+        _occurrences(
+              gate,
+              'missing, duplicate, or malformed revision metadata',
+            ) ==
+            1 &&
+        generation.contains(
+          r'''[[ "$ndk_revision" == '${{ steps.toolchains.outputs.android_ndk }}' ]]''',
+        ) &&
+        gate.contains(
+          r'''[[ "$ndk_revision" == '${{ steps.unix_toolchains.outputs.android_ndk }}' ]]''',
+        ) &&
+        !generation.contains("grep -Eq '^Pkg[.]Revision") &&
+        !gate.contains("grep -Eq '^Pkg[.]Revision"),
     'Apple generation is ARM-only':
         generation.contains('Build Apple ARM bundles') &&
         generation.contains(
@@ -284,3 +386,8 @@ String _between(String source, String start, String end) {
 
 int _occurrences(String source, String pattern) =>
     RegExp(RegExp.escape(pattern)).allMatches(source).length;
+
+int _orderedPairOccurrences(String source, String first, String second) =>
+    RegExp('${RegExp.escape(first)}[\\s\\S]*?${RegExp.escape(second)}')
+        .allMatches(source)
+        .length;

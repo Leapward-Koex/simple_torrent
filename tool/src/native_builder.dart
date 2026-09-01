@@ -3333,10 +3333,7 @@ final class NativeBuilder {
     final properties = File(_join(directory.path, 'source.properties'));
     if (!properties.existsSync()) return false;
     final content = await properties.readAsString();
-    return RegExp(
-      r'^Pkg\.Revision\s*=\s*' + RegExp.escape(revision) + r'\s*$',
-      multiLine: true,
-    ).hasMatch(content);
+    return androidNdkSourcePropertiesMatchRevision(content, revision);
   }
 
   Future<void> validateSourceShaMatchesCheckout(String sourceSha) async {
@@ -4076,6 +4073,42 @@ List<String> parseLipoArchitectures(String output) => output
     .split(RegExp(r'\s+'))
     .where((value) => value.isNotEmpty)
     .toList(growable: false);
+
+bool androidNdkSourcePropertiesMatchRevision(
+  String sourceProperties,
+  String expectedRevision,
+) {
+  final revisions = <String, String>{};
+  const revisionKeys = ['Pkg.BaseRevision', 'Pkg.Revision'];
+  for (final rawLine in sourceProperties.split(RegExp(r'\r?\n'))) {
+    final line = rawLine.trim();
+    if (line.isEmpty || line.startsWith('#') || line.startsWith('!')) continue;
+    String? recognizedKey;
+    for (final key in revisionKeys) {
+      if (line == key ||
+          line.startsWith('$key=') ||
+          line.startsWith('$key ') ||
+          line.startsWith('$key\t') ||
+          line.startsWith('$key:')) {
+        recognizedKey = key;
+        break;
+      }
+    }
+    if (recognizedKey == null) continue;
+    final separator = line.indexOf('=');
+    if (separator < 0) return false;
+    final key = line.substring(0, separator).trim();
+    final value = line.substring(separator + 1).trim();
+    if (key != recognizedKey || value.isEmpty || revisions.containsKey(key)) {
+      return false;
+    }
+    revisions[key] = value;
+  }
+  final actualRevision = revisions.containsKey('Pkg.BaseRevision')
+      ? revisions['Pkg.BaseRevision']
+      : revisions['Pkg.Revision'];
+  return actualRevision == expectedRevision;
+}
 
 List<AppleXcframeworkLibrary> validateAppleXcframeworkMetadata(
   NativeTarget target,
