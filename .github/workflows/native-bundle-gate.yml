@@ -241,7 +241,21 @@ jobs:
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
-          $flutter = (flutter --version --machine | ConvertFrom-Json).frameworkVersion
+          # A fresh Flutter SDK bootstraps its tool on the first invocation and
+          # writes progress text to stdout. Warm it before requesting JSON so
+          # that bootstrap output cannot contaminate the machine response.
+          flutter --version | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Flutter bootstrap failed with exit code $LASTEXITCODE" }
+          $flutterOutput = flutter --version --machine | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "Flutter version query failed with exit code $LASTEXITCODE" }
+          $jsonStart = $flutterOutput.IndexOf('{')
+          $jsonEnd = $flutterOutput.LastIndexOf('}')
+          if ($jsonStart -lt 0 -or $jsonEnd -lt $jsonStart) {
+            throw "Flutter machine response did not contain a JSON object: $flutterOutput"
+          }
+          $flutterJson = $flutterOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+          $flutter = ($flutterJson | ConvertFrom-Json -ErrorAction Stop).frameworkVersion
+          if ([string]::IsNullOrWhiteSpace($flutter)) { throw "Flutter machine response omitted frameworkVersion" }
           if ($flutter -ne '${{ steps.windows_toolchains.outputs.flutter }}') { throw "Flutter mismatch: $flutter" }
           $cmake = ((cmake --version)[0] -split ' ')[2]
           if ($cmake -ne '${{ steps.windows_toolchains.outputs.cmake }}') { throw "CMake mismatch: $cmake" }
@@ -258,14 +272,62 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$(flutter --version --machine | jq -r .frameworkVersion)" == '${{ steps.unix_toolchains.outputs.flutter }}' ]]
+          # Avoid mixing first-run Flutter bootstrap progress with machine JSON.
+          flutter --version >/dev/null
+          flutter_json="$(flutter --version --machine)"
+          flutter_version="$(printf '%s\n' "$flutter_json" | jq -er '.frameworkVersion')"
+          [[ "$flutter_version" == '${{ steps.unix_toolchains.outputs.flutter }}' ]] || {
+            echo "Flutter mismatch: $flutter_version" >&2
+            exit 69
+          }
           [[ "$(cmake --version | awk 'NR == 1 {print $3}')" == '${{ steps.unix_toolchains.outputs.cmake }}' ]]
           [[ "$(ninja --version)" == '${{ steps.unix_toolchains.outputs.ninja }}' ]]
           if [[ '${{ matrix.platform }}' == android ]]; then
             java_spec="$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java[.]specification[.]version/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
             [[ "$java_spec" == '${{ steps.unix_toolchains.outputs.jdk }}' ]]
-            grep -Eq '^Pkg[.]Revision[[:space:]]*=[[:space:]]*${{ steps.unix_toolchains.outputs.android_ndk }}$' \
-              "$ANDROID_NDK_ROOT/source.properties"
+            if ! ndk_revision="$(awk -F= '
+              function trim(value) {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+                return value
+              }
+              {
+                raw = trim($0)
+                key = trim($1)
+                if ((raw ~ /^Pkg[.]BaseRevision([[:space:]]|:|$)/ && key != "Pkg.BaseRevision") ||
+                    (raw ~ /^Pkg[.]Revision([[:space:]]|:|$)/ && key != "Pkg.Revision")) {
+                  invalid = 1
+                }
+                if (key == "Pkg.BaseRevision") {
+                  base_count++
+                  if (NF != 2 || base_count != 1) invalid = 1
+                  base = trim($2)
+                } else if (key == "Pkg.Revision") {
+                  revision_count++
+                  if (NF != 2 || revision_count != 1) invalid = 1
+                  revision = trim($2)
+                }
+              }
+              END {
+                if (invalid || base_count > 1 || revision_count > 1) exit 2
+                if (base_count == 1) {
+                  if (base == "") exit 2
+                  print base
+                  exit
+                }
+                if (revision_count == 1 && revision != "") {
+                  print revision
+                  exit
+                }
+                exit 2
+              }
+            ' "$ANDROID_NDK_ROOT/source.properties")"; then
+              echo "Android NDK source.properties has missing, duplicate, or malformed revision metadata." >&2
+              exit 69
+            fi
+            [[ "$ndk_revision" == '${{ steps.unix_toolchains.outputs.android_ndk }}' ]] || {
+              echo "Android NDK mismatch: $ndk_revision" >&2
+              exit 69
+            }
           else
             [[ "$(xcodebuild -version | awk 'NR == 1 {print $2}')" == '${{ steps.unix_toolchains.outputs.xcode }}' ]]
           fi

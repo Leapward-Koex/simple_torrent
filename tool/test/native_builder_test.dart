@@ -88,6 +88,70 @@ Future<void> main() async {
     );
   }
 
+  const pinnedNdkRevision = '29.0.13113456';
+  _expect(
+    androidNdkSourcePropertiesMatchRevision(
+      'Pkg.Revision = $pinnedNdkRevision-beta1\n'
+      'Pkg.BaseRevision = $pinnedNdkRevision\n',
+      pinnedNdkRevision,
+    ),
+    'accepts the exact NDK base revision when the package revision differs',
+  );
+  _expect(
+    androidNdkSourcePropertiesMatchRevision(
+      'Pkg.Revision = $pinnedNdkRevision\r\n',
+      pinnedNdkRevision,
+    ),
+    'falls back to the exact NDK package revision when no base exists',
+  );
+  _expect(
+    !androidNdkSourcePropertiesMatchRevision(
+      'Pkg.Revision = $pinnedNdkRevision\n'
+      'Pkg.BaseRevision = 29.0.14206865\n',
+      pinnedNdkRevision,
+    ),
+    'does not fall back to the package revision when a base revision exists',
+  );
+  for (final metadata in [
+    'Pkg.BaseRevision = $pinnedNdkRevision-preview',
+    'Pkg.Revision = $pinnedNdkRevision.1',
+  ]) {
+    _expect(
+      !androidNdkSourcePropertiesMatchRevision(metadata, pinnedNdkRevision),
+      'rejects an NDK revision that only has the pinned value as a prefix',
+    );
+  }
+  for (final metadata in [
+    'Pkg.BaseRevision = $pinnedNdkRevision\n'
+        'Pkg.BaseRevision = $pinnedNdkRevision',
+    'Pkg.Revision = $pinnedNdkRevision\n'
+        'Pkg.Revision = $pinnedNdkRevision',
+  ]) {
+    _expect(
+      !androidNdkSourcePropertiesMatchRevision(metadata, pinnedNdkRevision),
+      'rejects duplicate NDK revision properties',
+    );
+  }
+  for (final metadata in [
+    'Pkg.BaseRevision = \nPkg.Revision = $pinnedNdkRevision',
+    'Pkg.Revision = ',
+  ]) {
+    _expect(
+      !androidNdkSourcePropertiesMatchRevision(metadata, pinnedNdkRevision),
+      'rejects empty NDK revision properties',
+    );
+  }
+  for (final metadata in [
+    'Pkg.BaseRevision $pinnedNdkRevision\n'
+        'Pkg.Revision = $pinnedNdkRevision',
+    'Pkg.Revision $pinnedNdkRevision',
+  ]) {
+    _expect(
+      !androidNdkSourcePropertiesMatchRevision(metadata, pinnedNdkRevision),
+      'rejects NDK revision properties without an equals separator',
+    );
+  }
+
   final androidCommands = builder.generatedCommands(
     NativeTarget.android,
     const ['arm64-v8a'],
