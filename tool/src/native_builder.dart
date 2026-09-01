@@ -603,10 +603,8 @@ final class NativeBuilder {
     switch (target) {
       case NativeTarget.windows:
         args.addAll([
-          '-A',
-          'x64',
-          '-T',
-          'version=${toolchains['msvcToolset']}',
+          '-G',
+          'Ninja',
           '-DCMAKE_SYSTEM_VERSION=${toolchains['windowsSdk']}',
           '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
         ]);
@@ -1251,7 +1249,7 @@ final class NativeBuilder {
       'x64',
       opensslPrefix,
       sources,
-    )..insertAll(2, ['-G', 'Visual Studio 17 2022']);
+    )..add('-DCMAKE_MAKE_PROGRAM=${_unix(await _findNinja())}');
     await _run('cmake.exe', arguments, environment: environment);
     await _run('cmake.exe', [
       '--build',
@@ -3014,7 +3012,7 @@ final class NativeBuilder {
     final result = await _run(vswhere.path, [
       '-latest',
       '-version',
-      '[17.0,18.0)',
+      '[17.0,19.0)',
       '-products',
       '*',
       '-requires',
@@ -3024,7 +3022,9 @@ final class NativeBuilder {
     ], capture: true);
     final installation = (result.stdout as String).trim();
     if (installation.isEmpty) {
-      throw StateError('Visual Studio 2022 C++ build tools are not installed.');
+      throw StateError(
+        'Visual Studio 2022 or 2026 C++ build tools are not installed.',
+      );
     }
     final vcvars = File(
       _join(installation, 'VC', 'Auxiliary', 'Build', 'vcvars64.bat'),
@@ -3038,8 +3038,8 @@ final class NativeBuilder {
       '/c',
       'call',
       vcvars.path,
+      '${toolchains['windowsSdk']}',
       '-vcvars_ver=${toolchains['msvcToolset']}',
-      '-winsdk=${toolchains['windowsSdk']}',
       '>nul',
       '&&',
       'set',

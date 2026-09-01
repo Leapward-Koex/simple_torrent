@@ -138,12 +138,14 @@ binary inspection.
 ### Automated bundle regeneration
 
 `.github/workflows/native-bundle-generate.yml` watches the canonical native
-inputs on `master`. It builds Windows x64 on `windows-2022`, all three Android
+inputs on `master`. It builds Windows x64 on `windows-latest`, all three Android
 ABIs, and ARM-only iOS/macOS XCFrameworks on separate hosted runners. The
-Windows image retains the pinned VS2022/MSVC 14.44 toolchain; GitHub remapped
-`windows-2025` to Visual Studio 2026 in June 2026. The Apple job uses the
-explicit ARM64 `macos-26` image and Xcode 26.4.1. Toolchain versions are read
-from `native/dependencies.lock.json` and asserted before each build.
+Windows build selects the compatibility MSVC 14.44 toolset and SDK 26100 from
+the current Visual Studio installation, then uses the pinned CMake and Ninja
+versions so it does not depend on a particular Visual Studio generator. The
+Apple job uses the explicit ARM64 `macos-26` image and Xcode 26.4.1. Toolchain
+versions are read from `native/dependencies.lock.json` and asserted before each
+build.
 
 Each runner publishes a source-authenticated manifest fragment. The assembly
 job accepts exactly one complete fragment per platform, overlays the staged

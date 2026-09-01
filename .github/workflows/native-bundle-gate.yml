@@ -73,8 +73,8 @@ jobs:
       matrix:
         include:
           - platform: windows
-            # Keep the consumer build on the same VS 2022 toolchain as generation.
-            runner: windows-2022
+            # Exercise the bundle on the current GA Windows/Visual Studio image.
+            runner: windows-latest
           - platform: android
             runner: ubuntu-24.04
           - platform: macos
@@ -215,7 +215,6 @@ jobs:
           arch: amd64
           toolset: ${{ steps.windows_toolchains.outputs.msvc }}
           sdk: ${{ steps.windows_toolchains.outputs.windows_sdk }}
-          vsversion: "2022"
 
       - name: Install pinned JDK
         if: matrix.platform == 'android'

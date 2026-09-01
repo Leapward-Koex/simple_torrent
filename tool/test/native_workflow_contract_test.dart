@@ -114,11 +114,12 @@ void main() {
         generation.contains(
           'http.https://github.com/.extraheader="AUTHORIZATION: basic \$auth"',
         ),
-    'platform build runners are pinned':
-        generation.contains('runs-on: windows-2022') &&
+    'platform build runners match the requested policies':
+        generation.contains('runs-on: windows-latest') &&
         generation.contains('runs-on: ubuntu-24.04') &&
         generation.contains('runs-on: macos-26') &&
-        !generation.contains('runs-on: windows-2025'),
+        !generation.contains('runs-on: windows-2022') &&
+        !generation.contains('vsversion: "2022"'),
     'Flutter is bootstrapped before every machine-readable version query':
         _occurrences(generation, 'flutter --version --machine') == 3 &&
         _occurrences(gate, 'flutter --version --machine') == 2 &&
@@ -306,8 +307,9 @@ void main() {
         gate.contains('tail -n 3'),
     'gate has four independent non-fail-fast platform jobs':
         gate.contains('fail-fast: false') &&
-        gate.contains('runner: windows-2022') &&
-        !gate.contains('runner: windows-2025') &&
+        gate.contains('runner: windows-latest') &&
+        !gate.contains('runner: windows-2022') &&
+        !gate.contains('vsversion: "2022"') &&
         _occurrences(gate, '- platform: windows') == 1 &&
         _occurrences(gate, '- platform: android') == 1 &&
         _occurrences(gate, '- platform: macos') == 1 &&
