@@ -427,8 +427,8 @@ jobs:
           retention-days: 3
           compression-level: 0
           path: |
-            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework
-            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
             build/native/fragments/ios.manifest.json
             build/native/fragments/ios.source-sha
             build/native/fragments/macos.manifest.json
@@ -516,8 +516,8 @@ jobs:
             packages/simple_torrent_windows/windows/include
             packages/simple_torrent_android/android/src/main/jniLibs
             packages/simple_torrent_android/android/src/main/cpp/include
-            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework
-            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
             native/artifacts.manifest.json
             THIRD_PARTY_NOTICES.md
             packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md
@@ -631,8 +631,8 @@ jobs:
               packages/simple_torrent_windows/windows/include/*|\
               packages/simple_torrent_android/android/src/main/jniLibs/*|\
               packages/simple_torrent_android/android/src/main/cpp/include/*|\
-              packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/*|\
-              packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/*)
+              packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/*|\
+              packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/*)
                 ;;
               *)
                 echo "Candidate changed a path outside the generated allowlist: $path" >&2
@@ -652,8 +652,8 @@ jobs:
             packages/simple_torrent_windows/windows/include \
             packages/simple_torrent_android/android/src/main/jniLibs \
             packages/simple_torrent_android/android/src/main/cpp/include \
-            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework \
-            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
 
           binary_count=0
           while IFS= read -r -d '' file; do
@@ -677,8 +677,8 @@ jobs:
           done < <(find \
             packages/simple_torrent_windows/windows/lib \
             packages/simple_torrent_android/android/src/main/jniLibs \
-            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework \
-            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework \
             -type f \( -name '*.dll' -o -name '*.lib' -o -name '*.so' -o -name '*.a' \) -print0)
           (( binary_count > 0 )) || { echo "Candidate contains no generated binaries." >&2; exit 65; }
           git lfs fsck --pointers

@@ -528,12 +528,12 @@ Future<void> main() async {
           'packages/simple_torrent_android/android/src/main/jniLibs/x86_64/'
           'libsimple_torrent_native.so',
       NativeTarget.ios:
-          'packages/simple_torrent_ios/ios/Frameworks/'
+          'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/'
           'SimpleTorrentNative.xcframework/ios-arm64/'
           'libsimple_torrent_native.a',
       NativeTarget.macos:
-          'packages/simple_torrent_macos/macos/Frameworks/'
-          'SimpleTorrentNative.xcframework/macos-universal/'
+          'packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/'
+          'SimpleTorrentNative.xcframework/macos-arm64/'
           'libsimple_torrent_native.a',
     };
     for (final entry in targetFiles.entries) {
@@ -545,6 +545,11 @@ Future<void> main() async {
       );
       await staged.parent.create(recursive: true);
       await staged.writeAsString('artifact');
+      final stagedPaths = await inventoryBuilder.stagedArtifactPaths(entry.key);
+      _expect(
+        stagedPaths.length == 1 && stagedPaths.single == entry.value,
+        '${entry.key.cliName} stages artifacts at its canonical package path',
+      );
       await inventoryBuilder.validateStagedArtifactInventory(entry.key, [
         entry.value,
       ]);
@@ -1202,13 +1207,55 @@ Future<void> main() async {
     final packageText = await packageFile.readAsString();
     final podspecText = await podspec.readAsString();
     final sourceText = await source.readAsString();
+    final binaryTargets = RegExp(
+      r'''[.]binaryTarget[(]\s*name:\s*"SimpleTorrentNative",\s*path:\s*"([^"]+)"\s*[)]''',
+    ).allMatches(packageText).toList();
     _expect(
-      packageText.contains('SimpleTorrentNative.xcframework'),
-      '${entry.key} SwiftPM uses only the local XCFramework',
+      binaryTargets.length == 1,
+      '${entry.key} SwiftPM declares exactly one native binary target',
+    );
+    final swiftPackageArtifact = binaryTargets.single.group(1)!;
+    _expect(
+      swiftPackageArtifact == 'Frameworks/SimpleTorrentNative.xcframework',
+      '${entry.key} SwiftPM keeps the XCFramework inside its symlinked package root',
     );
     _expect(
-      podspecText.contains("Frameworks/SimpleTorrentNative.xcframework"),
-      '${entry.key} podspec uses only the local XCFramework',
+      !swiftPackageArtifact.startsWith('/') &&
+          !RegExp(r'^[A-Za-z]:').hasMatch(swiftPackageArtifact) &&
+          !swiftPackageArtifact.split('/').contains('..'),
+      '${entry.key} SwiftPM binary target cannot escape its package root',
+    );
+    _expect(
+      packageText.contains(
+            '.package(name: "FlutterFramework", path: "../FlutterFramework")',
+          ) &&
+          packageText.contains(
+            '.product(name: "FlutterFramework", package: "FlutterFramework")',
+          ) &&
+          packageText.contains('.library(name: "simple-torrent-${entry.key}"'),
+      '${entry.key} exposes a Flutter SwiftPM library product',
+    );
+    final vendoredFrameworks = RegExp(
+      r"s[.]vendored_frameworks\s*=\s*'([^']+)'",
+    ).allMatches(podspecText).toList();
+    _expect(
+      vendoredFrameworks.length == 1,
+      '${entry.key} CocoaPods declares exactly one vendored XCFramework',
+    );
+    final cocoaPodsArtifact = vendoredFrameworks.single.group(1)!;
+    _expect(
+      cocoaPodsArtifact == '$packageName/$swiftPackageArtifact',
+      '${entry.key} SwiftPM and CocoaPods resolve the same XCFramework',
+    );
+    final swiftPackageArtifactUri = packageFile.parent.absolute.uri.resolve(
+      swiftPackageArtifact,
+    );
+    final cocoaPodsArtifactUri = podspec.parent.absolute.uri.resolve(
+      cocoaPodsArtifact,
+    );
+    _expect(
+      swiftPackageArtifactUri == cocoaPodsArtifactUri,
+      '${entry.key} SwiftPM and CocoaPods target the same canonical path',
     );
     for (final framework in [
       'CoreFoundation',
@@ -1313,14 +1360,14 @@ Future<void> _testManifestAssembly(Directory sourceRepository) async {
       'packages/simple_torrent_android/android/src/main/jniLibs/armeabi-v7a/libsimple_torrent_native.so',
       'packages/simple_torrent_android/android/src/main/jniLibs/x86_64/libsimple_torrent_native.so',
       'packages/simple_torrent_android/android/src/main/cpp/include/simple_torrent_native.h',
-      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/Info.plist',
-      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/libsimple_torrent_native.a',
-      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/Headers/simple_torrent_native.h',
-      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/libsimple_torrent_native.a',
-      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/Headers/simple_torrent_native.h',
-      'packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/Info.plist',
-      'packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/libsimple_torrent_native.a',
-      'packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/Headers/simple_torrent_native.h',
+      'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/Info.plist',
+      'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/libsimple_torrent_native.a',
+      'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/Headers/simple_torrent_native.h',
+      'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/libsimple_torrent_native.a',
+      'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/Headers/simple_torrent_native.h',
+      'packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/Info.plist',
+      'packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/libsimple_torrent_native.a',
+      'packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/Headers/simple_torrent_native.h',
     ]) {
       await write(relative, 'artifact:$relative\n');
     }

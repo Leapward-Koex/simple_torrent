@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "SimpleTorrentNative",
-            path: "../Frameworks/SimpleTorrentNative.xcframework"
+            path: "Frameworks/SimpleTorrentNative.xcframework"
         ),
         .target(
             name: "simple_torrent_ios",
