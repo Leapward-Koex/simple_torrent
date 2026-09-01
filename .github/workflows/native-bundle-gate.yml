@@ -54,8 +54,8 @@ jobs:
                 packages/simple_torrent_windows/windows/include/*|\
                 packages/simple_torrent_android/android/src/main/jniLibs/*|\
                 packages/simple_torrent_android/android/src/main/cpp/include/*|\
-                packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/*|\
-                packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/*)
+                packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/*|\
+                packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/*)
                   bundle=true
                   break
                   ;;
@@ -100,8 +100,8 @@ jobs:
           case '${{ matrix.platform }}' in
             windows) prefix='packages/simple_torrent_windows/windows/lib' ;;
             android) prefix='packages/simple_torrent_android/android/src/main/jniLibs' ;;
-            macos) prefix='packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework' ;;
-            ios) prefix='packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework' ;;
+            macos) prefix='packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework' ;;
+            ios) prefix='packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework' ;;
             *) echo 'Unknown smoke platform.' >&2; exit 64 ;;
           esac
           git lfs install --local
@@ -331,6 +331,11 @@ jobs:
             [[ "$(xcodebuild -version | awk 'NR == 1 {print $2}')" == '${{ steps.unix_toolchains.outputs.xcode }}' ]]
           fi
 
+      - name: Enable Flutter Swift Package Manager integration
+        if: matrix.platform == 'macos' || matrix.platform == 'ios'
+        shell: bash
+        run: flutter config --enable-swift-package-manager
+
       - name: Verify Windows bundle
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -351,6 +356,21 @@ jobs:
         shell: bash
         run: ./tool/native.sh verify android
 
+      - name: Enable Android emulator KVM access
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          [[ -r /dev/kvm && -w /dev/kvm ]] || {
+            echo 'The Android smoke runner cannot read and write /dev/kvm.' >&2
+            exit 69
+          }
+          "$ANDROID_SDK_ROOT/emulator/emulator" -accel-check
+
       - name: Build and smoke-test Android x86_64 consumer
         if: matrix.platform == 'android'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -360,7 +380,8 @@ jobs:
           target: default
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-linux-hw-accel: false
+          emulator-options: -no-window -accel on -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh android release && ./tool/test-suspension.sh android debug
 
       - name: Verify macOS ARM bundle

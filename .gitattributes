@@ -2,8 +2,8 @@
 packages/simple_torrent_android/android/src/main/jniLibs/**/*.so filter=lfs diff=lfs merge=lfs -text
 packages/simple_torrent_windows/windows/lib/**/*.dll filter=lfs diff=lfs merge=lfs -text
 packages/simple_torrent_windows/windows/lib/**/*.lib filter=lfs diff=lfs merge=lfs -text
-packages/simple_torrent_ios/ios/Frameworks/**/*.a filter=lfs diff=lfs merge=lfs -text
-packages/simple_torrent_macos/macos/Frameworks/**/*.a filter=lfs diff=lfs merge=lfs -text
+packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/**/*.a filter=lfs diff=lfs merge=lfs -text
+packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/**/*.a filter=lfs diff=lfs merge=lfs -text
 
 # Preserve shell scripts with Unix line endings on every maintainer host.
 *.sh text eol=lf

@@ -33,7 +33,7 @@ dart pub publish --dry-run
 ```
 
 Do not publish if the dry-run archive does not contain
-`macos/Frameworks/SimpleTorrentNative.xcframework`; generated Apple artifacts
+`macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework`; generated Apple artifacts
 must be staged and verified on macOS first.
 
 ## License

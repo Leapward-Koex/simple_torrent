@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
   s.swift_version = '5.9'
   s.static_framework = true
   s.source_files = 'simple_torrent_ios/Sources/simple_torrent_ios/**/*.swift'
-  s.vendored_frameworks = 'Frameworks/SimpleTorrentNative.xcframework'
+  s.vendored_frameworks = 'simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework'
   s.resource_bundles = {
     'simple_torrent_ios_privacy' => [
       'simple_torrent_ios/Sources/simple_torrent_ios/PrivacyInfo.xcprivacy'

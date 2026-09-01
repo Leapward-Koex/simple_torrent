@@ -6,8 +6,20 @@ import 'package:yaml/yaml.dart';
 void main() {
   const generationPath = '.github/workflows/native-bundle-generate.yml';
   const gatePath = '.github/workflows/native-bundle-gate.yml';
+  const overlayPath = '.github/scripts/overlay-native-artifacts.sh';
+  const attributesPath = '.gitattributes';
   final generation = File(generationPath).readAsStringSync();
   final gate = File(gatePath).readAsStringSync();
+  final overlay = File(overlayPath).readAsStringSync();
+  final attributes = File(attributesPath).readAsStringSync();
+
+  const iosFrameworkDirectory =
+      'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks';
+  const macosFrameworkDirectory =
+      'packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks';
+  const frameworkName = 'SimpleTorrentNative.xcframework';
+  const iosFramework = '$iosFrameworkDirectory/$frameworkName';
+  const macosFramework = '$macosFrameworkDirectory/$frameworkName';
 
   final generationTriggerPaths = _between(
     generation,
@@ -284,6 +296,21 @@ void main() {
         generation.contains("-name '*.lib'") &&
         generation.contains("-name '*.so'") &&
         generation.contains("-name '*.a'"),
+    'Apple artifacts are rooted inside their Swift packages':
+        _occurrences(generation, iosFramework) == 5 &&
+        _occurrences(generation, macosFramework) == 5 &&
+        _occurrences(gate, iosFramework) == 2 &&
+        _occurrences(gate, macosFramework) == 2 &&
+        _occurrences(overlay, 'replace_tree $iosFramework') == 1 &&
+        _occurrences(overlay, 'replace_tree $macosFramework') == 1 &&
+        _occurrences(attributes, '$iosFrameworkDirectory/**/*.a') == 1 &&
+        _occurrences(attributes, '$macosFrameworkDirectory/**/*.a') == 1 &&
+        !'$generation\n$gate\n$overlay\n$attributes'.contains(
+          'packages/simple_torrent_ios/ios/Frameworks/',
+        ) &&
+        !'$generation\n$gate\n$overlay\n$attributes'.contains(
+          'packages/simple_torrent_macos/macos/Frameworks/',
+        ),
     'publish uses one fixed bot branch and no-op detection':
         generation.contains('BOT_BRANCH: bot/native-bundle') &&
         generation.contains('No native bundle changes were produced.') &&
@@ -337,6 +364,12 @@ void main() {
         gate.contains(r'[[ "$(uname -m)" == "arm64" ]]') &&
         !gate.contains('sim-x86_64') &&
         !gate.contains('macos-15-intel'),
+    'Apple smoke jobs explicitly exercise SwiftPM':
+        gate.contains(
+          "if: matrix.platform == 'macos' || matrix.platform == 'ios'",
+        ) &&
+        _occurrences(gate, 'flutter config --enable-swift-package-manager') ==
+            1,
     'iOS smoke selects and boots an explicit simulator':
         gate.contains('xcrun --sdk iphonesimulator --show-sdk-version') &&
         gate.contains(r'.version == $version or') &&
@@ -346,6 +379,18 @@ void main() {
         gate.contains('SIMPLE_TORRENT_DEVICE_ID') &&
         gate.contains('./tool/test-sample.sh ios release') &&
         gate.contains('./tool/test-suspension.sh ios debug'),
+    'Android smoke requires KVM hardware acceleration':
+        gate.contains('- name: Enable Android emulator KVM access') &&
+        gate.contains(
+          '''echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |''',
+        ) &&
+        gate.contains('sudo udevadm control --reload-rules') &&
+        gate.contains('sudo udevadm trigger --name-match=kvm') &&
+        gate.contains(r'[[ -r /dev/kvm && -w /dev/kvm ]]') &&
+        gate.contains(r'"$ANDROID_SDK_ROOT/emulator/emulator" -accel-check') &&
+        gate.contains('disable-linux-hw-accel: false') &&
+        gate.contains('emulator-options: -no-window -accel on ') &&
+        !gate.contains('disable-linux-hw-accel: auto'),
     'each platform performs init and suspension smoke coverage':
         _occurrences(gate, 'SIMPLE_TORRENT_DIAGNOSTICS_SUITE') >= 4 &&
         _occurrences(gate, 'test-suspension') >= 5 &&

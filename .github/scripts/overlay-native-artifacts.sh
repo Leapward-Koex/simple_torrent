@@ -35,5 +35,5 @@ replace_tree packages/simple_torrent_windows/windows/lib
 replace_tree packages/simple_torrent_windows/windows/include
 replace_tree packages/simple_torrent_android/android/src/main/jniLibs
 replace_tree packages/simple_torrent_android/android/src/main/cpp/include
-replace_tree packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework
-replace_tree packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+replace_tree packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework
+replace_tree packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
