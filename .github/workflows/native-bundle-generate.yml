@@ -5,6 +5,7 @@ on:
     branches:
       - master
     paths:
+      - .gitattributes
       - native/CMakeLists.txt
       - native/dependencies.lock.json
       - native/include/**
@@ -576,7 +577,7 @@ jobs:
 
           while IFS= read -r -d '' path; do
             case "$path" in
-              native/CMakeLists.txt|native/dependencies.lock.json|native/include/*|\
+              .gitattributes|native/CMakeLists.txt|native/dependencies.lock.json|native/include/*|\
               native/src/*|native/platform/*|native/patches/*|native/test/*|\
               tool/native.dart|tool/native.ps1|tool/native.sh|\
               tool/src/native_builder.dart|\

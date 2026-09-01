@@ -814,6 +814,55 @@ Future<void> main() async {
           fingerprintPaths.contains('tool/src/native_builder.dart'),
       'canonical fingerprint covers native core, tests, patches, and builder inputs',
     );
+
+    final commonHeader = await writeInput(
+      'packages/simple_torrent_windows/windows/include/'
+          'simple_torrent_native.h',
+      'common one\r\ncommon two\r\n',
+    );
+    final nestedHeader = await writeInput(
+      'packages/simple_torrent_windows/windows/include/'
+          'simple_torrent_windows/simple_torrent_plugin_c_api.h',
+      'plugin one\rplugin two\r\n',
+    );
+    final binaryArtifact = await writeInput(
+      'packages/simple_torrent_windows/windows/lib/x64/'
+          'simple_torrent_native.dll',
+      'binary\r\nbytes',
+    );
+    final binaryBytes = await binaryArtifact.readAsBytes();
+    await fingerprintBuilder.canonicalizeStagedArtifactHeaders(
+      NativeTarget.windows,
+    );
+    _expect(
+      await commonHeader.readAsString() == 'common one\ncommon two\n' &&
+          await nestedHeader.readAsString() == 'plugin one\nplugin two\n',
+      'staged native headers are canonicalized to LF before publication',
+    );
+    _expect(
+      !(await commonHeader.readAsBytes()).contains(0x0d) &&
+          !(await nestedHeader.readAsBytes()).contains(0x0d),
+      'canonical staged native headers contain no carriage returns',
+    );
+    _expect(
+      jsonEncode(await binaryArtifact.readAsBytes()) == jsonEncode(binaryBytes),
+      'header canonicalization leaves binary artifacts untouched',
+    );
+    final canonicalHeaderDigest = await Sha256.file(commonHeader);
+    await fingerprintBuilder.canonicalizeStagedArtifactHeaders(
+      NativeTarget.windows,
+    );
+    _expect(
+      await Sha256.file(commonHeader) == canonicalHeaderDigest,
+      'staged header canonicalization is idempotent',
+    );
+    _expectThrows(
+      () => validateCanonicalNativeHeaderBytes(
+        'packages/example.h',
+        utf8.encode('not canonical\r\n'),
+      ),
+      'canonical header validation rejects CRLF bytes',
+    );
   } finally {
     await fingerprintRoot.delete(recursive: true);
   }
@@ -871,11 +920,19 @@ Future<void> main() async {
     (await boostPatch.readAsString()).contains('LDBL_MANT_DIG == 64'),
     'Boost patch routes IEEE-128 Android x86_64 long double correctly',
   );
+  final gitAttributes = await File('.gitattributes').readAsString();
   _expect(
-    (await File(
-      '.gitattributes',
-    ).readAsString()).contains('/native/patches/*.patch text eol=lf'),
+    gitAttributes.contains('/native/patches/*.patch text eol=lf'),
     'native patch identity uses stable LF bytes on every host',
+  );
+  _expect(
+    [
+      '*.h',
+      '*.hh',
+      '*.hpp',
+      '*.hxx',
+    ].every((extension) => gitAttributes.contains('$extension text eol=lf')),
+    'native public headers use stable LF bytes on every host',
   );
   _expect(
     (await File(
@@ -886,6 +943,18 @@ Future<void> main() async {
   final builderSource = (await File(
     'tool/src/native_builder.dart',
   ).readAsString()).replaceAll('\r\n', '\n');
+  final canonicalizeHeadersIndex = builderSource.indexOf(
+    'await canonicalizeStagedArtifactHeaders(target);',
+  );
+  final writeManifestIndex = builderSource.indexOf(
+    'await _writeArtifactManifest(',
+    canonicalizeHeadersIndex,
+  );
+  _expect(
+    canonicalizeHeadersIndex >= 0 &&
+        writeManifestIndex > canonicalizeHeadersIndex,
+    'staged headers are canonicalized before manifest hashes are written',
+  );
   _expect(
     builderSource.contains("'-vcvars_ver=\${toolchains['msvcToolset']}'") &&
         builderSource.contains("'\${toolchains['windowsSdk']}'") &&
@@ -1343,6 +1412,42 @@ Future<void> _testManifestAssembly(Directory sourceRepository) async {
         await fragmentFiles[target]!.writeAsString(jsonEncode(value));
       }
     }
+
+    await rewriteFragments(sourceSha);
+    final windowsFragment = (jsonDecode(
+      await fragmentFiles[NativeTarget.windows]!.readAsString(),
+    ) as Map).cast<String, Object?>();
+    final windowsPlatform =
+        ((windowsFragment['platforms']! as Map)['windows']! as Map)
+            .cast<String, Object?>();
+    final windowsHeaderRecord = (windowsPlatform['files']! as List)
+        .cast<Map>()
+        .map((record) => record.cast<String, Object?>())
+        .firstWhere(
+          (record) => isNativeHeaderArtifactPath(record['path']! as String),
+        );
+    final windowsHeader = File(
+      [
+        root.path,
+        ...(windowsHeaderRecord['path']! as String).split('/'),
+      ].join(Platform.pathSeparator),
+    );
+    final canonicalWindowsHeader = await windowsHeader.readAsBytes();
+    await windowsHeader.writeAsString('tampered\r\nheader\r\n');
+    windowsHeaderRecord['size'] = await windowsHeader.length();
+    windowsHeaderRecord['sha256'] = await Sha256.file(windowsHeader);
+    await fragmentFiles[NativeTarget.windows]!.writeAsString(
+      jsonEncode(windowsFragment),
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects a consistently rehashed CRLF header fragment',
+    );
+    await windowsHeader.writeAsBytes(canonicalWindowsHeader);
+    await rewriteFragments(sourceSha);
 
     await rewriteFragments(secondSourceSha);
     final identicalFromLaterDispatch = await builder.assembleManifestFragments(

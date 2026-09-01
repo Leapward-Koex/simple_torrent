@@ -316,6 +316,30 @@ final class AppleXcframeworkLibrary {
 bool _isFullGitSha(String value) =>
     RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(value);
 
+const _nativeHeaderExtensions = ['.h', '.hh', '.hpp', '.hxx'];
+
+bool isNativeHeaderArtifactPath(String path) {
+  final lower = path.toLowerCase();
+  return _nativeHeaderExtensions.any(lower.endsWith);
+}
+
+String canonicalNativeHeaderText(String content) =>
+    content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+void validateCanonicalNativeHeaderBytes(String path, List<int> bytes) {
+  if (!isNativeHeaderArtifactPath(path)) return;
+  try {
+    utf8.decode(bytes);
+  } on FormatException {
+    throw StateError('Native artifact header is not valid UTF-8: $path');
+  }
+  if (bytes.contains(0x0d)) {
+    throw StateError(
+      'Native artifact header must use canonical LF line endings: $path',
+    );
+  }
+}
+
 final class DependencySpec {
   const DependencySpec({
     required this.name,
@@ -477,6 +501,7 @@ final class NativeBuilder {
       case NativeTarget.macos:
         await _buildMacos(sources, architectures, caBundle!);
     }
+    await canonicalizeStagedArtifactHeaders(target);
     await _writeArtifactManifest(
       target,
       architectures,
@@ -2226,6 +2251,9 @@ final class NativeBuilder {
           'Artifact checksum mismatch during assembly: $relative',
         );
       }
+      if (isNativeHeaderArtifactPath(relative)) {
+        validateCanonicalNativeHeaderBytes(relative, await file.readAsBytes());
+      }
     }
     return records;
   }
@@ -2681,6 +2709,9 @@ final class NativeBuilder {
       final digest = await Sha256.file(file);
       if (digest != record['sha256']) {
         throw StateError('Artifact checksum mismatch: $relative');
+      }
+      if (isNativeHeaderArtifactPath(relative)) {
+        validateCanonicalNativeHeaderBytes(relative, await file.readAsBytes());
       }
     }
     switch (target) {
@@ -3570,6 +3601,53 @@ final class NativeBuilder {
     return files
         .map((file) => _relativePath(file.path))
         .toList(growable: false);
+  }
+
+  Future<void> canonicalizeStagedArtifactHeaders(NativeTarget target) async {
+    for (final file in await _artifactFiles(target)) {
+      final relative = _relativePath(file.path);
+      if (!isNativeHeaderArtifactPath(relative)) continue;
+
+      final originalBytes = await file.readAsBytes();
+      late final String original;
+      try {
+        original = utf8.decode(originalBytes);
+      } on FormatException {
+        throw StateError('Staged native header is not valid UTF-8: $relative');
+      }
+      if (!originalBytes.contains(0x0d)) {
+        validateCanonicalNativeHeaderBytes(relative, originalBytes);
+        continue;
+      }
+
+      final canonicalBytes = utf8.encode(canonicalNativeHeaderText(original));
+      final temporary = File(
+        _join(
+          buildRoot.path,
+          'canonical-headers',
+          '${Sha256.bytes(utf8.encode(relative))}.tmp',
+        ),
+      );
+      _requireStrictlyWithin(file, repositoryRoot, operation: 'canonicalize');
+      await temporary.parent.create(recursive: true);
+      await _prepareTemporaryFileWithin(
+        temporary,
+        repositoryRoot,
+        operation: 'canonicalize',
+      );
+      try {
+        await temporary.writeAsBytes(canonicalBytes, flush: true);
+        validateCanonicalNativeHeaderBytes(
+          relative,
+          await temporary.readAsBytes(),
+        );
+        await _renameEntityWithin(temporary, file, repositoryRoot);
+      } finally {
+        if (temporary.existsSync()) {
+          await _deleteFileWithin(temporary, repositoryRoot);
+        }
+      }
+    }
   }
 
   Future<void> validateStagedArtifactInventory(
