@@ -8,3 +8,10 @@ packages/simple_torrent_macos/macos/Frameworks/**/*.a filter=lfs diff=lfs merge=
 # Preserve shell scripts with Unix line endings on every maintainer host.
 *.sh text eol=lf
 /native/patches/*.patch text eol=lf
+
+# Native bundle manifests hash public headers byte-for-byte. Keep their bytes
+# stable when a bundle is built on Windows and published from a Unix runner.
+*.h text eol=lf
+*.hh text eol=lf
+*.hpp text eol=lf
+*.hxx text eol=lf

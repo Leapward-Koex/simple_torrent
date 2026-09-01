@@ -22,6 +22,7 @@ void main() {
         generation.contains('  push:\n    branches:\n      - master') &&
         generation.contains('  workflow_dispatch:') &&
         [
+          '.gitattributes',
           'native/CMakeLists.txt',
           'native/dependencies.lock.json',
           'native/include/**',
@@ -56,6 +57,7 @@ void main() {
         generation.contains(
           'Master changed native generation input or tooling',
         ) &&
+        _occurrences(generation, '.gitattributes') >= 2 &&
         generation.contains(
           r'GIT_LFS_SKIP_SMUDGE=1 git checkout --detach "$latest_sha"',
         ) &&
