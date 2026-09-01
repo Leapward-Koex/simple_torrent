@@ -20,6 +20,73 @@ Future<void> main() async {
     invocation.architectures.join(',') == 'arm64-v8a,x86_64',
     'parses comma-separated architectures',
   );
+  const sourceSha = '0123456789abcdef0123456789abcdef01234567';
+  final assembleInvocation = NativeInvocation.parse([
+    'assemble',
+    '--source-sha',
+    sourceSha,
+    '--fragment',
+    'windows=windows.json',
+    '--android-manifest=android.json',
+    '--fragment=ios=ios.json',
+    '--macos-manifest',
+    'macos.json',
+  ]);
+  _expect(
+    assembleInvocation.action == NativeAction.assemble &&
+        assembleInvocation.sourceSha == sourceSha &&
+        assembleInvocation.manifestFragments.length == 4,
+    'parses a four-platform authenticated assembly invocation',
+  );
+  _expectUsageThrows(
+    () => NativeInvocation.parse([
+      'assemble',
+      '--source-sha',
+      sourceSha,
+      '--fragment=windows=one.json',
+      '--fragment=windows=two.json',
+    ]),
+    'rejects duplicate named manifest fragments',
+  );
+  _expectUsageThrows(
+    () => NativeInvocation.parse([
+      'assemble',
+      '--source-sha',
+      sourceSha,
+      '--fragment=windows=windows.json',
+    ]),
+    'rejects an incomplete assembly invocation',
+  );
+  final headResult = await Process.run('git', [
+    '-c',
+    "safe.directory=${repository.absolute.path.replaceAll('\\', '/')}",
+    'rev-parse',
+    '--verify',
+    'HEAD',
+  ], workingDirectory: repository.path);
+  if (headResult.exitCode != 0) {
+    throw StateError('Cannot resolve test checkout: ${headResult.stderr}');
+  }
+  final headSha = '${headResult.stdout}'.trim();
+  await builder.validateSourceShaMatchesCheckout(headSha);
+  _expect(true, 'source SHA authentication accepts the checked-out commit');
+  await _expectThrowsAsync(
+    () => builder.validateSourceShaMatchesCheckout(''.padLeft(40, '0')),
+    'source SHA authentication rejects a different commit',
+  );
+
+  final binaryMarkers = builder.binaryVersionMarkers();
+  for (final expected in [
+    'libtorrent/2.0.12',
+    'OpenSSL/3.5.8',
+    'Boost/1_91',
+    'libtorrent=2.0.12;boost=1_91;openssl=3.5.8',
+  ]) {
+    _expect(
+      binaryMarkers.contains(expected),
+      'binary marker is derived from the dependency lock: $expected',
+    );
+  }
 
   final androidCommands = builder.generatedCommands(
     NativeTarget.android,
@@ -59,6 +126,8 @@ Future<void> main() async {
   ]).toString();
   _expect(
     windowsText.contains('-DSTN_BUILD_TESTS=ON') &&
+        windowsText.contains('version=14.44') &&
+        windowsText.contains('CMAKE_SYSTEM_VERSION=10.0.26100.0') &&
         windowsText.contains('step: ctest') &&
         windowsText.contains('simple_torrent_native_session_suspension_test') &&
         windowsText.contains('--no-tests=error'),
@@ -147,7 +216,7 @@ Future<void> main() async {
     const [],
   );
   _expect(
-    iosArchitectures.join(',') == 'arm64,sim-arm64,sim-x86_64',
+    iosArchitectures.join(',') == 'arm64,sim-arm64',
     'uses all required iOS slices',
   );
   final ios = builder.generatedCommands(NativeTarget.ios, iosArchitectures);
@@ -155,8 +224,8 @@ Future<void> main() async {
   for (final expected in [
     'ios64-xcrun',
     'iossimulator-arm64-xcrun',
-    'iossimulator-x86_64-xcrun',
     '15.0',
+    'ZERO_AR_DATE',
     'embedded-ca-bundle',
     '2026-08-13',
     'f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9',
@@ -177,12 +246,72 @@ Future<void> main() async {
   final macosText = macos.toString();
   for (final expected in [
     'darwin64-arm64-cc',
-    'darwin64-x86_64-cc',
     'MACOSX_DEPLOYMENT_TARGET',
     '12.0',
+    'ZERO_AR_DATE',
   ]) {
     _expect(macosText.contains(expected), 'macOS command contains $expected');
   }
+
+  final validIosPlist = <String, Object?>{
+    'AvailableLibraries': [
+      {
+        'LibraryIdentifier': 'ios-arm64',
+        'LibraryPath': 'libsimple_torrent_native.a',
+        'SupportedArchitectures': ['arm64'],
+        'SupportedPlatform': 'ios',
+      },
+      {
+        'LibraryIdentifier': 'ios-arm64-simulator',
+        'LibraryPath': 'libsimple_torrent_native.a',
+        'SupportedArchitectures': ['arm64'],
+        'SupportedPlatform': 'ios',
+        'SupportedPlatformVariant': 'simulator',
+      },
+    ],
+  };
+  _expect(
+    validateAppleXcframeworkMetadata(NativeTarget.ios, validIosPlist).length ==
+        2,
+    'accepts exact ARM iOS device and simulator XCFramework metadata',
+  );
+  _expect(
+    validateAppleXcframeworkMetadata(NativeTarget.macos, {
+          'AvailableLibraries': [
+            {
+              'LibraryIdentifier': 'macos-arm64',
+              'LibraryPath': 'libsimple_torrent_native.a',
+              'SupportedArchitectures': ['arm64'],
+              'SupportedPlatform': 'macos',
+            },
+          ],
+        }).single.architectures.single ==
+        'arm64',
+    'accepts exact ARM macOS XCFramework metadata',
+  );
+  final iosWithIntel = (jsonDecode(jsonEncode(validIosPlist)) as Map)
+      .cast<String, Object?>();
+  (((iosWithIntel['AvailableLibraries']! as List)[1]
+              as Map)['SupportedArchitectures']
+          as List)
+      .add('x86_64');
+  _expectThrows(
+    () => validateAppleXcframeworkMetadata(NativeTarget.ios, iosWithIntel),
+    'rejects an unexpected Intel iOS Simulator slice',
+  );
+  final iosWrongVariant = (jsonDecode(jsonEncode(validIosPlist)) as Map)
+      .cast<String, Object?>();
+  ((iosWrongVariant['AvailableLibraries']! as List)[1] as Map).remove(
+    'SupportedPlatformVariant',
+  );
+  _expectThrows(
+    () => validateAppleXcframeworkMetadata(NativeTarget.ios, iosWrongVariant),
+    'rejects incorrect iOS simulator variant metadata',
+  );
+  _expect(
+    parseLipoArchitectures(' arm64  \n').single == 'arm64',
+    'parses lipo -archs output for exact slice comparison',
+  );
 
   final temporary = await Directory.systemTemp.createTemp('stn-sha-test-');
   try {
@@ -196,6 +325,68 @@ Future<void> main() async {
   } finally {
     await temporary.delete(recursive: true);
   }
+
+  final metadataRoot = await Directory.systemTemp.createTemp(
+    'stn-notice-metadata-test-',
+  );
+  try {
+    final lock = (jsonDecode(
+      await File('native/dependencies.lock.json').readAsString(),
+    ) as Map).cast<String, Object?>();
+    final metadataDependencies = lock['dependencies']! as Map;
+    (metadataDependencies['libtorrent']! as Map)['version'] = '9.9.9';
+    final lockFile = File(
+      '${metadataRoot.path}${Platform.pathSeparator}native'
+      '${Platform.pathSeparator}dependencies.lock.json',
+    );
+    await lockFile.parent.create(recursive: true);
+    await lockFile.writeAsString(jsonEncode(lock));
+    for (final relative in [
+      'THIRD_PARTY_NOTICES.md',
+      'packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md',
+      'packages/simple_torrent_android/THIRD_PARTY_NOTICES.md',
+      'packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md',
+      'packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md',
+    ]) {
+      final notice = File(
+        [
+          metadataRoot.path,
+          ...relative.split('/'),
+        ].join(Platform.pathSeparator),
+      );
+      await notice.parent.create(recursive: true);
+      await notice.writeAsString(
+        'before\n<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->\n'
+        'stale\n<!-- END GENERATED NATIVE DEPENDENCIES -->\nafter\n',
+      );
+    }
+    final metadataBuilder = NativeBuilder.fromRepository(metadataRoot);
+    _expect(
+      metadataBuilder.binaryVersionMarkers().contains('libtorrent/9.9.9'),
+      'binary version markers follow dependency-lock version changes',
+    );
+    await metadataBuilder.syncMetadata();
+    final rootNotice = await File(
+      '${metadataRoot.path}${Platform.pathSeparator}THIRD_PARTY_NOTICES.md',
+    ).readAsString();
+    _expect(
+      rootNotice.contains('| libtorrent | 9.9.9 | BSD-3-Clause |') &&
+          rootNotice.startsWith('before\n') &&
+          rootNotice.endsWith('after\n'),
+      'same-license version changes update only the bounded notice table',
+    );
+    (metadataDependencies['libtorrent']! as Map)['license'] = 'MIT';
+    await lockFile.writeAsString(jsonEncode(lock));
+    final changedLicenseBuilder = NativeBuilder.fromRepository(metadataRoot);
+    _expectThrows(
+      () => changedLicenseBuilder.renderNativeDependencyTable(null),
+      'rejects a changed dependency license pending full-text review',
+    );
+  } finally {
+    await metadataRoot.delete(recursive: true);
+  }
+
+  await _testManifestAssembly(repository);
 
   final pruningRoot = await Directory.systemTemp.createTemp(
     'stn-android-stage-test-',
@@ -567,6 +758,21 @@ Future<void> main() async {
   );
   final dependencyLock = await File('native/dependencies.lock.json')
       .readAsString();
+  final decodedDependencyLock = (jsonDecode(dependencyLock) as Map)
+      .cast<String, Object?>();
+  final pinnedToolchains = (decodedDependencyLock['toolchains']! as Map)
+      .cast<String, Object?>();
+  _expect(
+    pinnedToolchains['flutter'] == '3.47.0' &&
+        pinnedToolchains['cmake'] == '3.29.3' &&
+        pinnedToolchains['ninja'] == '1.12.1' &&
+        pinnedToolchains['jdk'] == '17' &&
+        pinnedToolchains['msvcToolset'] == '14.44' &&
+        pinnedToolchains['windowsSdk'] == '10.0.26100.0' &&
+        pinnedToolchains['xcode'] == '26.4.1' &&
+        pinnedToolchains['androidNdk'] == '29.0.13113456',
+    'dependency lock pins every CI and native build toolchain',
+  );
   _expect(
     dependencyLock.contains('cacert-2026-08-13.pem') &&
         dependencyLock.contains(
@@ -614,6 +820,13 @@ Future<void> main() async {
   final builderSource = (await File(
     'tool/src/native_builder.dart',
   ).readAsString()).replaceAll('\r\n', '\n');
+  _expect(
+    builderSource.contains("'-vcvars_ver=\${toolchains['msvcToolset']}'") &&
+        builderSource.contains("'-winsdk=\${toolchains['windowsSdk']}'") &&
+        builderSource.contains("'[17.0,18.0)'") &&
+        builderSource.contains('_assertPinnedBuildToolchains('),
+    'VS 2022 vcvars and native builds assert the lock-pinned toolchains',
+  );
   for (final expected in [
     '_findGitPosixPerl',
     '_prepareAndroidPerlModules',
@@ -633,7 +846,6 @@ Future<void> main() async {
     "'prefixFiles'",
     "'--exec-path'",
     "operatingSystem == 'msys'",
-    "result['posixPerl']",
     "'.simple-torrent-tool.json'",
     '_directoryFingerprint',
     'resolveSymbolicLinksSync',
@@ -914,9 +1126,313 @@ Future<void> main() async {
   stdout.writeln('{"ok":true,"suite":"native-builder"}');
 }
 
+Future<void> _testManifestAssembly(Directory sourceRepository) async {
+  const sourceSha = '0123456789abcdef0123456789abcdef01234567';
+  const secondSourceSha = '89abcdef0123456789abcdef0123456789abcdef';
+  final root = await Directory.systemTemp.createTemp('stn-assembly-test-');
+  try {
+    Future<File> write(String relative, String content) async {
+      final file = File(
+        [root.path, ...relative.split('/')].join(Platform.pathSeparator),
+      );
+      await file.parent.create(recursive: true);
+      await file.writeAsString(content);
+      return file;
+    }
+
+    await write(
+      'native/dependencies.lock.json',
+      await File(
+        '${sourceRepository.path}${Platform.pathSeparator}native'
+        '${Platform.pathSeparator}dependencies.lock.json',
+      ).readAsString(),
+    );
+    await write('native/CMakeLists.txt', 'cmake\n');
+    await write('native/include/simple_torrent_native.h', 'header\n');
+    await write('native/src/simple_torrent_native.cpp', 'source\n');
+    await write('native/test/session_suspension_test.cpp', 'test\n');
+    await write(
+      'native/patches/boost-1.91.0-android-x86_64-long-double.patch',
+      await File(
+        '${sourceRepository.path}${Platform.pathSeparator}native'
+        '${Platform.pathSeparator}patches${Platform.pathSeparator}'
+        'boost-1.91.0-android-x86_64-long-double.patch',
+      ).readAsString(),
+    );
+    await write('tool/native.dart', 'entry\n');
+    await write('tool/native.ps1', 'powershell\n');
+    await write('tool/native.sh', 'shell\n');
+    await write('tool/src/native_builder.dart', 'builder\n');
+
+    for (final relative in [
+      'packages/simple_torrent_windows/windows/lib/x64/simple_torrent_native.dll',
+      'packages/simple_torrent_windows/windows/lib/x64/simple_torrent_native.lib',
+      'packages/simple_torrent_windows/windows/include/simple_torrent_native.h',
+      'packages/simple_torrent_android/android/src/main/jniLibs/arm64-v8a/libsimple_torrent_native.so',
+      'packages/simple_torrent_android/android/src/main/jniLibs/armeabi-v7a/libsimple_torrent_native.so',
+      'packages/simple_torrent_android/android/src/main/jniLibs/x86_64/libsimple_torrent_native.so',
+      'packages/simple_torrent_android/android/src/main/cpp/include/simple_torrent_native.h',
+      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/Info.plist',
+      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/libsimple_torrent_native.a',
+      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/Headers/simple_torrent_native.h',
+      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/libsimple_torrent_native.a',
+      'packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/Headers/simple_torrent_native.h',
+      'packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/Info.plist',
+      'packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/libsimple_torrent_native.a',
+      'packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/Headers/simple_torrent_native.h',
+    ]) {
+      await write(relative, 'artifact:$relative\n');
+    }
+
+    final builder = NativeBuilder.fromRepository(root);
+    final rootProvenance = await builder.expectedArtifactManifestProvenance();
+    final fragmentFiles = <NativeTarget, File>{};
+    final fragmentValues = <NativeTarget, Map<String, Object?>>{};
+    for (final target in NativeTarget.values) {
+      final architectures = builder.normalizedArchitectures(target, const []);
+      final buildProvenance = await builder.expectedPlatformBuildProvenance(
+        target,
+        architectures,
+        artifactInputs: rootProvenance,
+      );
+      final recipe = (buildProvenance['recipe']! as Map)
+          .cast<String, Object?>();
+      final paths = await builder.stagedArtifactPaths(target);
+      final records = <Map<String, Object?>>[];
+      for (final path in paths) {
+        final file = File(
+          [root.path, ...path.split('/')].join(Platform.pathSeparator),
+        );
+        records.add({
+          'path': path,
+          'size': await file.length(),
+          'sha256': await Sha256.file(file),
+        });
+      }
+      final platformHostTools = builder.expectedHostTools(target);
+      final platform = <String, Object?>{
+        'architectures': architectures,
+        'minimum': recipe['minimum'],
+        'buildType': recipe['buildType'],
+        'opensslLinkage': recipe['opensslLinkage'],
+        'features': recipe['features'],
+        'buildFlags': recipe['buildFlags'],
+        'hostTools': platformHostTools,
+        'buildProvenance': buildProvenance,
+        'files': records,
+        'fragmentSourceSha': sourceSha,
+      };
+      final fragment = <String, Object?>{
+        ...rootProvenance,
+        'fragmentSourceSha': sourceSha,
+        'hostTools': {target.cliName: platformHostTools},
+        'platforms': {target.cliName: platform},
+      };
+      final fragmentFile = await write(
+        'build/fragments/${target.cliName}.json',
+        jsonEncode(fragment),
+      );
+      fragmentFiles[target] = fragmentFile;
+      fragmentValues[target] = fragment;
+    }
+
+    final assembled = await builder.assembleManifestFragments(
+      fragmentFiles,
+      sourceSha: sourceSha,
+    );
+    final assembledPlatforms = assembled['platforms']! as Map;
+    _expect(
+      assembled['fragmentSourceSha'] == null &&
+          assembledPlatforms.length == 4 &&
+          assembledPlatforms.values.every(
+            (platform) => (platform as Map)['fragmentSourceSha'] == null,
+          ),
+      'assembly combines all platform records and strips ephemeral source SHA',
+    );
+    _expect(
+      jsonEncode((assembledPlatforms['ios']! as Map)['architectures']) ==
+              jsonEncode(['arm64', 'sim-arm64']) &&
+          jsonEncode((assembledPlatforms['macos']! as Map)['architectures']) ==
+              jsonEncode(['arm64']),
+      'assembly requires the complete ARM-only Apple architecture sets',
+    );
+
+    Future<void> rewriteFragments(
+      String sha, {
+      void Function(NativeTarget, Map<String, Object?>)? mutate,
+    }) async {
+      for (final target in NativeTarget.values) {
+        final value = (jsonDecode(jsonEncode(fragmentValues[target])) as Map)
+            .cast<String, Object?>();
+        value['fragmentSourceSha'] = sha;
+        final platform = ((value['platforms']! as Map)[target.cliName]! as Map);
+        platform['fragmentSourceSha'] = sha;
+        mutate?.call(target, value);
+        await fragmentFiles[target]!.writeAsString(jsonEncode(value));
+      }
+    }
+
+    await rewriteFragments(secondSourceSha);
+    final identicalFromLaterDispatch = await builder.assembleManifestFragments(
+      fragmentFiles,
+      sourceSha: secondSourceSha,
+    );
+    _expect(
+      jsonEncode(assembled) == jsonEncode(identicalFromLaterDispatch),
+      'ephemeral source authentication preserves idempotent assembled output',
+    );
+
+    await rewriteFragments(sourceSha);
+    final androidValue = (jsonDecode(
+      await fragmentFiles[NativeTarget.android]!.readAsString(),
+    ) as Map).cast<String, Object?>();
+    androidValue['fragmentSourceSha'] = secondSourceSha;
+    await fragmentFiles[NativeTarget.android]!.writeAsString(
+      jsonEncode(androidValue),
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects a mixed-source manifest fragment',
+    );
+
+    await rewriteFragments(
+      sourceSha,
+      mutate: (target, value) {
+        if (target == NativeTarget.windows) value['untrusted'] = true;
+      },
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects unknown top-level fragment fields',
+    );
+
+    await rewriteFragments(
+      sourceSha,
+      mutate: (target, value) {
+        if (target != NativeTarget.android) return;
+        final rootTools = value['hostTools']! as Map;
+        final platform = (value['platforms']! as Map)['android']! as Map;
+        final platformTools = platform['hostTools']! as Map;
+        (rootTools['android']! as Map)['cmake'] = 'untrusted';
+        platformTools['cmake'] = 'untrusted';
+      },
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects tampered pinned host-tool provenance',
+    );
+
+    await rewriteFragments(
+      sourceSha,
+      mutate: (target, value) {
+        if (target == NativeTarget.macos) {
+          ((value['platforms']! as Map)['macos']! as Map)['architectures'] =
+              <String>[];
+        }
+      },
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects a partial release architecture set',
+    );
+
+    await rewriteFragments(
+      sourceSha,
+      mutate: (target, value) {
+        if (target == NativeTarget.windows) {
+          final platform = (value['platforms']! as Map)['windows']! as Map;
+          final record = (platform['files']! as List).first as Map;
+          record['sha256'] = ''.padLeft(64, '0');
+        }
+      },
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects a tampered artifact manifest record',
+    );
+
+    await rewriteFragments(sourceSha);
+    final stagedWindowsArtifact = File(
+      [
+        root.path,
+        ...'packages/simple_torrent_windows/windows/lib/x64/'
+                'simple_torrent_native.dll'
+            .split('/'),
+      ].join(Platform.pathSeparator),
+    );
+    final stagedWindowsBytes = await stagedWindowsArtifact.readAsBytes();
+    await stagedWindowsArtifact.writeAsBytes([...stagedWindowsBytes, 0]);
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects an artifact changed after runner publication',
+    );
+    await stagedWindowsArtifact.writeAsBytes(stagedWindowsBytes);
+
+    await rewriteFragments(
+      sourceSha,
+      mutate: (target, value) {
+        if (target == NativeTarget.ios) {
+          final platform = (value['platforms']! as Map)['ios']! as Map;
+          final build = platform['buildProvenance']! as Map;
+          (build['nativeInputs']! as Map)['sha256'] = ''.padLeft(64, '0');
+        }
+      },
+    );
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        fragmentFiles,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects stale canonical source provenance',
+    );
+
+    await rewriteFragments(sourceSha);
+    final duplicateFragments = Map<NativeTarget, File>.from(fragmentFiles);
+    duplicateFragments[NativeTarget.ios] =
+        duplicateFragments[NativeTarget.windows]!;
+    await _expectThrowsAsync(
+      () => builder.assembleManifestFragments(
+        duplicateFragments,
+        sourceSha: sourceSha,
+      ),
+      'assembly rejects one fragment file supplied under duplicate names',
+    );
+  } finally {
+    await root.delete(recursive: true);
+  }
+}
+
 void _expect(bool condition, String description) {
   if (!condition) throw StateError('FAILED: $description');
   stdout.writeln('PASS: $description');
+}
+
+void _expectUsageThrows(void Function() operation, String description) {
+  try {
+    operation();
+  } on NativeUsageException {
+    stdout.writeln('PASS: $description');
+    return;
+  }
+  throw StateError('FAILED: $description');
 }
 
 void _expectThrows(void Function() operation, String description) {

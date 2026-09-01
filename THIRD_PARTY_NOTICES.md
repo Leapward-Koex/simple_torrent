@@ -4,31 +4,35 @@ The bundled `simple_torrent_native` release artifacts contain statically
 linked code from the following projects. They are not fetched or built on an
 application developer's machine.
 
-| Component | Pinned version | License |
+<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->
+
+| Component | Pinned version | License (SPDX) |
 | --- | --- | --- |
-| libtorrent | 2.0.12 | BSD 3-Clause |
-| Boost | 1.91.0 | Boost Software License 1.0 |
-| OpenSSL | 3.5.8 LTS | Apache License 2.0 |
-| LLVM libc++ / libc++abi (Android only) | Android NDK 29.0.13113456 toolchain | Apache License 2.0 with LLVM Exception |
-| Mozilla CA certificate bundle (curl extract) | 2026-08-13 | MPL 2.0 |
+| libtorrent | 2.0.12 | BSD-3-Clause |
+| Boost | 1.91.0 | BSL-1.0 |
+| OpenSSL | 3.5.8 | Apache-2.0 |
+| LLVM libc++ / libc++abi (Android only) | Android NDK 29.0.13113456 | Apache-2.0 WITH LLVM-exception |
+| Mozilla CA certificate bundle | 2026-08-13 | MPL-2.0 |
+
+<!-- END GENERATED NATIVE DEPENDENCIES -->
 
 The downloaded source archives and Mozilla bundle have exact URLs and SHA-256
 hashes in `native/dependencies.lock.json`. Android libc++ comes from the pinned
 NDK installed by the Android SDK manager. License texts and source references
 are in `native/licenses/`.
 
-The builder applies the repository-tracked
-`native/patches/boost-1.91.0-android-x86_64-long-double.patch`. It narrows
-Boost.Math's Intel 80-bit branch to `LDBL_MANT_DIG == 64`, allowing Android
-x86_64's IEEE-128 `long double` to use Boost's existing generic 128-bit branch.
-The patch checksum is recorded in the authenticated extracted-source stamp.
+When required by the pinned Boost release, the builder applies the reviewed,
+repository-tracked Android x86_64 long-double compatibility patch. Applied
+patch paths and checksums are recorded in the authenticated source stamp and
+artifact provenance, so a dependency version change cannot silently reuse a
+patch for a different source release.
 
 Release artifacts are built with C++17, DHT and extensions enabled, logging
 and deprecated libtorrent APIs disabled, and OpenSSL linked statically.
 Android uses API 24 and the static C++ runtime for `arm64-v8a`,
 `armeabi-v7a`, and `x86_64`. Windows uses a release x64 DLL with a stable C
 ABI. Apple outputs are static XCFrameworks for iOS device arm64, iOS simulator
-arm64/x86_64, and macOS arm64/x86_64. Apple artifacts embed the pinned Mozilla
+arm64, and macOS arm64. Apple artifacts embed the pinned Mozilla
 CA extract and materialize it into app-private Application Support before
 creating the OpenSSL-backed session.
 

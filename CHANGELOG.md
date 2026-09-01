@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+- Added source-authenticated, cross-runner native bundle regeneration with a
+  deterministic four-platform manifest assembler and generated dependency
+  notice tables.
+- Added a fixed bot pull request flow with Git LFS enforcement, allowlisted
+  publication, squash auto-merge, and a stable aggregate smoke gate.
+- Added Windows, Android, ARM64 macOS, and ARM64 iOS Simulator consumer smoke
+  coverage, including deterministic loopback transfer suspension tests.
+
 ## [2.0.0] - 2026-08-30
 
 - Converted the repository to a Dart Pub workspace with six independently

@@ -1,0 +1,286 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:yaml/yaml.dart';
+
+void main() {
+  const generationPath = '.github/workflows/native-bundle-generate.yml';
+  const gatePath = '.github/workflows/native-bundle-gate.yml';
+  final generation = File(generationPath).readAsStringSync();
+  final gate = File(gatePath).readAsStringSync();
+
+  final generationTriggerPaths = _between(
+    generation,
+    '    paths:\n',
+    '  workflow_dispatch:',
+  );
+
+  final checks = <String, bool>{
+    'generation workflow is valid YAML': _isWorkflow(generation),
+    'gate workflow is valid YAML': _isWorkflow(gate),
+    'generation runs only for canonical master inputs':
+        generation.contains('  push:\n    branches:\n      - master') &&
+        generation.contains('  workflow_dispatch:') &&
+        [
+          'native/CMakeLists.txt',
+          'native/dependencies.lock.json',
+          'native/include/**',
+          'native/src/**',
+          'native/platform/**',
+          'native/patches/**',
+          'native/test/**',
+          'tool/native.dart',
+          'tool/native.ps1',
+          'tool/native.sh',
+          'tool/src/native_builder.dart',
+          '.github/workflows/native-bundle-generate.yml',
+          '.github/scripts/overlay-native-artifacts.sh',
+          '.github/scripts/sync-native-notices-from-candidate.sh',
+        ].every(generationTriggerPaths.contains),
+    'generated outputs cannot retrigger generation':
+        !generationTriggerPaths.contains('artifacts.manifest.json') &&
+        !generationTriggerPaths.contains('THIRD_PARTY_NOTICES.md') &&
+        !generationTriggerPaths.contains('jniLibs') &&
+        !generationTriggerPaths.contains('Frameworks') &&
+        !generationTriggerPaths.contains('windows/lib'),
+    'manual generation rejects a non-master source': generation.contains(
+      r'if [[ "$GITHUB_REF" != refs/heads/master ]]',
+    ),
+    'publication rebases safely or rejects a stale native source':
+        generation.contains(
+          "'+refs/heads/master:refs/remotes/origin/master'",
+        ) &&
+        generation.contains(
+          r'git diff --no-renames --name-only --diff-filter=ACMRTD -z "$GITHUB_SHA" "$latest_sha"',
+        ) &&
+        generation.contains(
+          'Master changed native generation input or tooling',
+        ) &&
+        generation.contains(
+          r'GIT_LFS_SKIP_SMUDGE=1 git checkout --detach "$latest_sha"',
+        ) &&
+        generation.indexOf(
+              r'GIT_LFS_SKIP_SMUDGE=1 git checkout --detach "$latest_sha"',
+            ) <
+            generation.indexOf('Overlay and validate candidate changes'),
+    'generation cancels superseded runs': generation.contains(
+      'group: native-bundle-generation\n  cancel-in-progress: true',
+    ),
+    'build and assembly permissions are read-only':
+        generation.startsWith('name: Native bundle generation') &&
+        generation.contains('permissions:\n  contents: read') &&
+        _occurrences(generation, '      contents: write') == 1 &&
+        _occurrences(generation, '      pull-requests: write') == 1,
+    'third-party setup is immutable and write token is step-scoped':
+        _occurrences(
+              generation,
+              'subosito/flutter-action@'
+              '1a449444c387b1966244ae4d4f8c696479add0b2',
+            ) ==
+            4 &&
+        _occurrences(
+              gate,
+              'subosito/flutter-action@'
+              '1a449444c387b1966244ae4d4f8c696479add0b2',
+            ) ==
+            2 &&
+        !generation.contains('subosito/flutter-action@v2') &&
+        !gate.contains('subosito/flutter-action@v2') &&
+        generation.contains(
+          'ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756',
+        ) &&
+        gate.contains(
+          'ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756',
+        ) &&
+        generation.contains(
+          'android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407',
+        ) &&
+        gate.contains(
+          'android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407',
+        ) &&
+        gate.contains(
+          'reactivecircus/android-emulator-runner@'
+          'a421e43855164a8197daf9d8d40fe71c6996bb0d',
+        ) &&
+        !generation.contains('ilammy/msvc-dev-cmd@v') &&
+        !gate.contains('ilammy/msvc-dev-cmd@v') &&
+        !generation.contains('android-actions/setup-android@v') &&
+        !gate.contains('android-actions/setup-android@v') &&
+        !gate.contains('reactivecircus/android-emulator-runner@v') &&
+        !generation.contains('    env:\n      GH_TOKEN:') &&
+        _occurrences(generation, '          GH_TOKEN: \${{ github.token }}') ==
+            4 &&
+        _occurrences(generation, '          persist-credentials: false') == 5 &&
+        generation.contains(
+          'http.https://github.com/.extraheader="AUTHORIZATION: basic \$auth"',
+        ),
+    'platform build runners are pinned':
+        generation.contains('runs-on: windows-2022') &&
+        generation.contains('runs-on: ubuntu-24.04') &&
+        generation.contains('runs-on: macos-26') &&
+        !generation.contains('runs-on: windows-2025'),
+    'Apple generation is ARM-only':
+        generation.contains('Build Apple ARM bundles') &&
+        generation.contains(
+          'build ios --arch arm64 --arch sim-arm64 --source-sha',
+        ) &&
+        generation.contains('build macos --arch arm64 --source-sha') &&
+        generation.contains(r'[[ "$(uname -m)" == "arm64" ]]') &&
+        !generation.contains('sim-x86_64') &&
+        !generation.contains('macos-15-intel'),
+    'only authenticated downloads are cached':
+        _occurrences(generation, 'uses: actions/cache@v4') == 3 &&
+        _occurrences(generation, 'path: .native-cache/downloads') == 3 &&
+        !generation.contains('path: .native-cache/sources'),
+    'all fragments carry and recheck the triggering SHA':
+        _occurrences(generation, '--source-sha') >= 5 &&
+        [
+          'windows',
+          'android',
+          'ios',
+          'macos',
+        ].every((platform) => generation.contains('$platform.source-sha')) &&
+        generation.contains('Check fragment source SHAs'),
+    'assembly names all four fragments and refreshes notices':
+        ['windows', 'android', 'ios', 'macos'].every(
+          (platform) => generation.contains(
+            '--fragment "$platform=incoming/build/native/fragments/'
+            '$platform.manifest.json"',
+          ),
+        ) &&
+        generation.contains('./tool/native.sh sync-metadata') &&
+        generation.contains(
+          'bash .github/scripts/sync-native-notices-from-candidate.sh',
+        ),
+    'candidate is kept outside the repository checkout': generation.contains(
+      r'path: ${{ runner.temp }}/native-bundle-candidate',
+    ),
+    'publish is allowlisted and verifies Git LFS objects':
+        generation.contains(
+          'Candidate changed a path outside the generated allowlist',
+        ) &&
+        generation.contains('git check-attr filter') &&
+        generation.contains('git lfs fsck --pointers') &&
+        generation.contains("-name '*.dll'") &&
+        generation.contains("-name '*.lib'") &&
+        generation.contains("-name '*.so'") &&
+        generation.contains("-name '*.a'"),
+    'publish uses one fixed bot branch and no-op detection':
+        generation.contains('BOT_BRANCH: bot/native-bundle') &&
+        generation.contains('No native bundle changes were produced.') &&
+        generation.contains('Close an obsolete fixed-branch PR') &&
+        generation.contains(r'gh pr close "$pr_number" --delete-branch') &&
+        generation.contains('--force-with-lease=') &&
+        generation.contains('.head.repo.full_name == \$repo') &&
+        generation.contains('.head.ref == \$ref') &&
+        generation.contains('.base.repo.full_name == \$repo') &&
+        generation.contains('.base.ref == "master"') &&
+        generation.contains('.head.sha == \$sha'),
+    'auto-merge is fail-closed behind the stable gate':
+        generation.contains(
+          'native-bundle-gate is not configured as a strict required check in an active master ruleset',
+        ) &&
+        generation.contains('strict_required_status_checks_policy == true') &&
+        !generation.contains('branches/master/protection') &&
+        generation.contains("gh pr merge '\${{ steps.pr.outputs.number }}'") &&
+        generation.contains(
+          '--auto --squash --delete-branch --match-head-commit "\$expected_head"',
+        ),
+    'gate runs on every pull request to master':
+        gate.contains('  pull_request:\n    branches:\n      - master') &&
+        gate.contains('git diff --no-renames --name-only') &&
+        gate.contains(
+          r'[[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" && "$HEAD_REF" == bot/native-bundle ]]',
+        ),
+    'gate checks out LFS content read-only':
+        gate.contains('permissions:\n  contents: read') &&
+        !gate.contains('contents: write') &&
+        !gate.contains(r'ref: ${{ github.event.pull_request.head.sha }}') &&
+        gate.contains(r'git ls-tree -r -z --name-only HEAD -- "$prefix"') &&
+        gate.contains('git lfs pointer --check --strict --stdin') &&
+        gate.contains('Committed binary is not covered by Git LFS') &&
+        gate.contains(r'git lfs pull --include="$prefix/**" --exclude=""') &&
+        gate.contains(r'git lfs pointer --file="$file"') &&
+        gate.contains('tail -n 3'),
+    'gate has four independent non-fail-fast platform jobs':
+        gate.contains('fail-fast: false') &&
+        gate.contains('runner: windows-2022') &&
+        !gate.contains('runner: windows-2025') &&
+        _occurrences(gate, '- platform: windows') == 1 &&
+        _occurrences(gate, '- platform: android') == 1 &&
+        _occurrences(gate, '- platform: macos') == 1 &&
+        _occurrences(gate, '- platform: ios') == 1,
+    'Apple smoke jobs use ARM hosted runners and ARM bundles':
+        _occurrences(gate, 'runner: macos-26') == 2 &&
+        gate.contains('Verify macOS ARM bundle') &&
+        gate.contains('Verify iOS ARM bundle') &&
+        gate.contains(r'[[ "$(uname -m)" == "arm64" ]]') &&
+        !gate.contains('sim-x86_64') &&
+        !gate.contains('macos-15-intel'),
+    'iOS smoke selects and boots an explicit simulator':
+        gate.contains('xcrun --sdk iphonesimulator --show-sdk-version') &&
+        gate.contains(r'.version == $version or') &&
+        gate.contains(r'startswith($version + ".")') &&
+        gate.contains('xcrun simctl list runtimes --json') &&
+        gate.contains(r'xcrun simctl bootstatus "$udid" -b') &&
+        gate.contains('SIMPLE_TORRENT_DEVICE_ID') &&
+        gate.contains('./tool/test-sample.sh ios release') &&
+        gate.contains('./tool/test-suspension.sh ios debug'),
+    'each platform performs init and suspension smoke coverage':
+        _occurrences(gate, 'SIMPLE_TORRENT_DIAGNOSTICS_SUITE') >= 4 &&
+        _occurrences(gate, 'test-suspension') >= 5 &&
+        gate.contains('./tool/test-sample.sh macos release') &&
+        gate.contains('./tool/test-sample.sh android release') &&
+        gate.contains(
+          './tool/test-sample.sh android release && '
+          './tool/test-suspension.sh android debug',
+        ) &&
+        gate.contains(r'.\tool\test-sample.ps1 windows -BuildMode release'),
+    'public-network tests are not a required gate': !gate
+        .toLowerCase()
+        .contains('wired'),
+    'non-bundle pull requests pass through the stable aggregate check':
+        gate.contains('    name: native-bundle-gate') &&
+        gate.contains('    if: always()') &&
+        gate.contains(r'if [[ "$BUNDLE" != true ]]') &&
+        gate.contains('the gate passes without platform jobs.'),
+    'Unix workflow scripts are made executable at runtime':
+        generation.contains('chmod +x tool/native.sh') &&
+        gate.contains('chmod +x tool/native.sh'),
+  };
+
+  var passed = true;
+  for (final entry in checks.entries) {
+    if (entry.value) {
+      stdout.writeln('PASS: ${entry.key}');
+    } else {
+      passed = false;
+      stderr.writeln('FAIL: ${entry.key}');
+    }
+  }
+  stdout.writeln(
+    jsonEncode({'ok': passed, 'suite': 'native-workflow-contract'}),
+  );
+  if (!passed) exitCode = 1;
+}
+
+bool _isWorkflow(String source) {
+  try {
+    final parsed = loadYaml(source);
+    return parsed is YamlMap &&
+        parsed['name'] is String &&
+        parsed['jobs'] is YamlMap;
+  } on YamlException {
+    return false;
+  }
+}
+
+String _between(String source, String start, String end) {
+  final startIndex = source.indexOf(start);
+  final endIndex = source.indexOf(end, startIndex + start.length);
+  if (startIndex < 0 || endIndex < 0) return '';
+  return source.substring(startIndex + start.length, endIndex);
+}
+
+int _occurrences(String source, String pattern) =>
+    RegExp(RegExp.escape(pattern)).allMatches(source).length;

@@ -1,0 +1,732 @@
+name: Native bundle generation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - native/CMakeLists.txt
+      - native/dependencies.lock.json
+      - native/include/**
+      - native/src/**
+      - native/platform/**
+      - native/patches/**
+      - native/test/**
+      - tool/native.dart
+      - tool/native.ps1
+      - tool/native.sh
+      - tool/src/native_builder.dart
+      - .github/workflows/native-bundle-generate.yml
+      - .github/scripts/overlay-native-artifacts.sh
+      - .github/scripts/sync-native-notices-from-candidate.sh
+  workflow_dispatch:
+
+concurrency:
+  group: native-bundle-generation
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DART_ANALYTICS_DISABLED: "true"
+  FLUTTER_SUPPRESS_ANALYTICS: "true"
+
+jobs:
+  validate-source:
+    name: Validate generation source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require master as the source ref
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/master ]]; then
+            echo "Native bundles may only be generated from refs/heads/master, not $GITHUB_REF." >&2
+            exit 64
+          fi
+
+  build-windows:
+    name: Build Windows x64 bundle
+    needs: validate-source
+    # windows-2025 now resolves to VS 2026; the pinned Flutter/CMake toolchain
+    # requires the VS 2022 image that still carries MSVC 14.44 and SDK 26100.
+    runs-on: windows-2022
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    steps:
+      - name: Check out canonical source
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          persist-credentials: false
+
+      - name: Read pinned toolchains
+        id: toolchains
+        shell: pwsh
+        run: |
+          $lock = Get-Content native/dependencies.lock.json -Raw | ConvertFrom-Json
+          "flutter=$($lock.toolchains.flutter)" >> $env:GITHUB_OUTPUT
+          "cmake=$($lock.toolchains.cmake)" >> $env:GITHUB_OUTPUT
+          "ninja=$($lock.toolchains.ninja)" >> $env:GITHUB_OUTPUT
+          "msvc=$($lock.toolchains.msvcToolset)" >> $env:GITHUB_OUTPUT
+          "windows_sdk=$($lock.toolchains.windowsSdk)" >> $env:GITHUB_OUTPUT
+
+      - name: Install pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.toolchains.outputs.flutter }}
+          channel: stable
+          cache: false
+
+      - name: Install pinned CMake and Ninja
+        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ steps.toolchains.outputs.cmake }}
+          ninjaVersion: ${{ steps.toolchains.outputs.ninja }}
+          useCloudCache: false
+          useLocalCache: false
+
+      - name: Select pinned MSVC and Windows SDK
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: amd64
+          toolset: ${{ steps.toolchains.outputs.msvc }}
+          sdk: ${{ steps.toolchains.outputs.windows_sdk }}
+          vsversion: "2022"
+
+      - name: Assert Windows toolchains
+        shell: pwsh
+        run: |
+          $flutter = (flutter --version --machine | ConvertFrom-Json).frameworkVersion
+          if ($flutter -ne '${{ steps.toolchains.outputs.flutter }}') { throw "Flutter mismatch: $flutter" }
+          $cmake = ((cmake --version)[0] -split ' ')[2]
+          if ($cmake -ne '${{ steps.toolchains.outputs.cmake }}') { throw "CMake mismatch: $cmake" }
+          $ninja = (ninja --version).Trim()
+          if ($ninja -ne '${{ steps.toolchains.outputs.ninja }}') { throw "Ninja mismatch: $ninja" }
+          if (-not $env:VCToolsVersion.StartsWith('${{ steps.toolchains.outputs.msvc }}.')) {
+            throw "MSVC mismatch: $env:VCToolsVersion"
+          }
+          $sdk = $env:WindowsSDKVersion.TrimEnd('\')
+          if ($sdk -ne '${{ steps.toolchains.outputs.windows_sdk }}') { throw "Windows SDK mismatch: $sdk" }
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw "Expected an AMD64 host." }
+
+      - name: Restore authenticated dependency downloads
+        uses: actions/cache@v4
+        with:
+          path: .native-cache/downloads
+          key: native-downloads-${{ runner.os }}-${{ hashFiles('native/dependencies.lock.json') }}
+
+      - name: Build and verify Windows bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/native/ci-logs, build/native/fragments | Out-Null
+          & .\tool\native.ps1 build windows --source-sha $env:GITHUB_SHA 2>&1 |
+            Tee-Object -FilePath build/native/ci-logs/windows.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item native/artifacts.manifest.json build/native/fragments/windows.manifest.json
+          Set-Content -NoNewline build/native/fragments/windows.source-sha $env:GITHUB_SHA
+
+      - name: Upload Windows fragment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-windows
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
+          path: |
+            packages/simple_torrent_windows/windows/lib
+            packages/simple_torrent_windows/windows/include
+            build/native/fragments/windows.manifest.json
+            build/native/fragments/windows.source-sha
+            build/native/ci-logs/windows.log
+
+  build-android:
+    name: Build Android ARM and x86_64 bundle
+    needs: validate-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    steps:
+      - name: Check out canonical source
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          persist-credentials: false
+
+      - name: Enable repository shell tools
+        shell: bash
+        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
+
+      - name: Read pinned toolchains
+        id: toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in flutter cmake ninja jdk androidNdk; do
+            output_name="${key}"
+            [[ "$key" == "androidNdk" ]] && output_name="android_ndk"
+            printf '%s=%s\n' "$output_name" "$(jq -r ".toolchains.${key}" native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Install pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.toolchains.outputs.flutter }}
+          channel: stable
+          cache: false
+
+      - name: Install pinned CMake and Ninja
+        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ steps.toolchains.outputs.cmake }}
+          ninjaVersion: ${{ steps.toolchains.outputs.ninja }}
+          useCloudCache: false
+          useLocalCache: false
+
+      - name: Install pinned JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.toolchains.outputs.jdk }}
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install pinned Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "ndk;${{ steps.toolchains.outputs.android_ndk }}"
+          printf 'ANDROID_NDK_ROOT=%s/ndk/%s\n' "$ANDROID_SDK_ROOT" '${{ steps.toolchains.outputs.android_ndk }}' >> "$GITHUB_ENV"
+          printf 'ANDROID_NDK=%s/ndk/%s\n' "$ANDROID_SDK_ROOT" '${{ steps.toolchains.outputs.android_ndk }}' >> "$GITHUB_ENV"
+
+      - name: Assert Android toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(flutter --version --machine | jq -r .frameworkVersion)" == '${{ steps.toolchains.outputs.flutter }}' ]]
+          [[ "$(cmake --version | awk 'NR == 1 {print $3}')" == '${{ steps.toolchains.outputs.cmake }}' ]]
+          [[ "$(ninja --version)" == '${{ steps.toolchains.outputs.ninja }}' ]]
+          java_spec="$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java[.]specification[.]version/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
+          [[ "$java_spec" == '${{ steps.toolchains.outputs.jdk }}' ]]
+          grep -Eq '^Pkg[.]Revision[[:space:]]*=[[:space:]]*${{ steps.toolchains.outputs.android_ndk }}$' \
+            "$ANDROID_NDK_ROOT/source.properties"
+          [[ "$(uname -m)" == "x86_64" ]]
+
+      - name: Restore authenticated dependency downloads
+        uses: actions/cache@v4
+        with:
+          path: .native-cache/downloads
+          key: native-downloads-${{ runner.os }}-${{ hashFiles('native/dependencies.lock.json') }}
+
+      - name: Build and verify Android bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/native/ci-logs build/native/fragments
+          ./tool/native.sh build android --source-sha "$GITHUB_SHA" 2>&1 | tee build/native/ci-logs/android.log
+          cp native/artifacts.manifest.json build/native/fragments/android.manifest.json
+          printf '%s' "$GITHUB_SHA" > build/native/fragments/android.source-sha
+
+      - name: Upload Android fragment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-android
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
+          path: |
+            packages/simple_torrent_android/android/src/main/jniLibs
+            packages/simple_torrent_android/android/src/main/cpp/include
+            build/native/fragments/android.manifest.json
+            build/native/fragments/android.source-sha
+            build/native/ci-logs/android.log
+
+  build-apple:
+    name: Build Apple ARM bundles
+    needs: validate-source
+    runs-on: macos-26
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Check out canonical source
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          persist-credentials: false
+
+      - name: Enable repository shell tools
+        shell: bash
+        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
+
+      - name: Read pinned toolchains
+        id: toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in flutter cmake ninja xcode; do
+            printf '%s=%s\n' "$key" "$(jq -r ".toolchains.${key}" native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Select pinned Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ steps.toolchains.outputs.xcode }}'
+          major_minor="${expected%.*}"
+          developer_dir="/Applications/Xcode_${major_minor}.app/Contents/Developer"
+          [[ -d "$developer_dir" ]] || { echo "Pinned Xcode is missing: $developer_dir" >&2; exit 69; }
+          printf 'DEVELOPER_DIR=%s\n' "$developer_dir" >> "$GITHUB_ENV"
+          actual="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | awk 'NR == 1 {print $2}')"
+          [[ "$actual" == "$expected" ]] || { echo "Xcode mismatch: $actual" >&2; exit 69; }
+          [[ "$(uname -m)" == "arm64" ]] || { echo "macos-26 must be an ARM64 runner." >&2; exit 69; }
+
+      - name: Install pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.toolchains.outputs.flutter }}
+          channel: stable
+          cache: false
+
+      - name: Install pinned CMake and Ninja
+        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ steps.toolchains.outputs.cmake }}
+          ninjaVersion: ${{ steps.toolchains.outputs.ninja }}
+          useCloudCache: false
+          useLocalCache: false
+
+      - name: Assert Apple toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(flutter --version --machine | jq -r .frameworkVersion)" == '${{ steps.toolchains.outputs.flutter }}' ]]
+          [[ "$(cmake --version | awk 'NR == 1 {print $3}')" == '${{ steps.toolchains.outputs.cmake }}' ]]
+          [[ "$(ninja --version)" == '${{ steps.toolchains.outputs.ninja }}' ]]
+          [[ "$(xcodebuild -version | awk 'NR == 1 {print $2}')" == '${{ steps.toolchains.outputs.xcode }}' ]]
+
+      - name: Restore authenticated dependency downloads
+        uses: actions/cache@v4
+        with:
+          path: .native-cache/downloads
+          key: native-downloads-${{ runner.os }}-${{ hashFiles('native/dependencies.lock.json') }}
+
+      - name: Build and verify iOS bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/native/ci-logs build/native/fragments
+          ./tool/native.sh build ios --arch arm64 --arch sim-arm64 --source-sha "$GITHUB_SHA" \
+            2>&1 | tee build/native/ci-logs/ios.log
+          cp native/artifacts.manifest.json build/native/fragments/ios.manifest.json
+          printf '%s' "$GITHUB_SHA" > build/native/fragments/ios.source-sha
+
+      - name: Remove iOS intermediates
+        shell: bash
+        run: ./tool/native.sh clean ios
+
+      - name: Build and verify macOS bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./tool/native.sh build macos --arch arm64 --source-sha "$GITHUB_SHA" \
+            2>&1 | tee build/native/ci-logs/macos.log
+          cp native/artifacts.manifest.json build/native/fragments/macos.manifest.json
+          printf '%s' "$GITHUB_SHA" > build/native/fragments/macos.source-sha
+
+      - name: Upload Apple fragments
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-apple
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
+          path: |
+            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+            build/native/fragments/ios.manifest.json
+            build/native/fragments/ios.source-sha
+            build/native/fragments/macos.manifest.json
+            build/native/fragments/macos.source-sha
+            build/native/ci-logs/ios.log
+            build/native/ci-logs/macos.log
+
+  assemble:
+    name: Assemble complete native bundle
+    needs:
+      - build-windows
+      - build-android
+      - build-apple
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out canonical source
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          persist-credentials: false
+
+      - name: Enable repository shell tools
+        shell: bash
+        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
+
+      - name: Read pinned Flutter
+        id: toolchains
+        shell: bash
+        run: printf 'flutter=%s\n' "$(jq -r .toolchains.flutter native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.toolchains.outputs.flutter }}
+          channel: stable
+          cache: false
+
+      - name: Download platform fragments
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-build-*
+          path: incoming
+          merge-multiple: true
+
+      - name: Check fragment source SHAs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for platform in windows android ios macos; do
+            test "$(cat "incoming/build/native/fragments/${platform}.source-sha")" = "$GITHUB_SHA" || {
+              echo "Fragment source SHA mismatch for $platform." >&2
+              exit 65
+            }
+          done
+
+      - name: Overlay platform staging roots
+        shell: bash
+        run: bash .github/scripts/overlay-native-artifacts.sh incoming
+
+      - name: Assemble manifest and synchronize notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/native/ci-logs
+          ./tool/native.sh assemble \
+            --fragment "windows=incoming/build/native/fragments/windows.manifest.json" \
+            --fragment "android=incoming/build/native/fragments/android.manifest.json" \
+            --fragment "ios=incoming/build/native/fragments/ios.manifest.json" \
+            --fragment "macos=incoming/build/native/fragments/macos.manifest.json" \
+            --source-sha "$GITHUB_SHA" 2>&1 | tee build/native/ci-logs/assembly.log
+          ./tool/native.sh sync-metadata 2>&1 | tee -a build/native/ci-logs/assembly.log
+
+      - name: Upload complete candidate bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-bundle-candidate
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+          path: |
+            packages/simple_torrent_windows/windows/lib
+            packages/simple_torrent_windows/windows/include
+            packages/simple_torrent_android/android/src/main/jniLibs
+            packages/simple_torrent_android/android/src/main/cpp/include
+            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework
+            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+            native/artifacts.manifest.json
+            THIRD_PARTY_NOTICES.md
+            packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md
+            packages/simple_torrent_android/THIRD_PARTY_NOTICES.md
+            packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md
+            packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md
+
+      - name: Upload assembly log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-bundle-assembly-log
+          if-no-files-found: warn
+          retention-days: 3
+          path: |
+            build/native/ci-logs/assembly.log
+
+  publish:
+    name: Publish native bundle pull request
+    needs: assemble
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BOT_BRANCH: bot/native-bundle
+    steps:
+      - name: Check out triggering source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          lfs: false
+          persist-credentials: false
+
+      - name: Download candidate bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: native-bundle-candidate
+          path: ${{ runner.temp }}/native-bundle-candidate
+
+      - name: Move publication onto a fresh safe master base
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+            fetch --no-tags --depth=1 origin \
+            '+refs/heads/master:refs/remotes/origin/master'
+          latest_sha="$(git rev-parse refs/remotes/origin/master)"
+          if [[ "$latest_sha" == "$GITHUB_SHA" ]]; then
+            exit 0
+          fi
+
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              native/CMakeLists.txt|native/dependencies.lock.json|native/include/*|\
+              native/src/*|native/platform/*|native/patches/*|native/test/*|\
+              tool/native.dart|tool/native.ps1|tool/native.sh|\
+              tool/src/native_builder.dart|\
+              .github/workflows/native-bundle-generate.yml|\
+              .github/scripts/overlay-native-artifacts.sh|\
+              .github/scripts/sync-native-notices-from-candidate.sh)
+                echo "Master changed native generation input or tooling while this run was building: $path" >&2
+                echo 'A generation run for the newer master commit must publish instead.' >&2
+                exit 75
+                ;;
+            esac
+          done < <(git diff --no-renames --name-only --diff-filter=ACMRTD -z "$GITHUB_SHA" "$latest_sha")
+
+          echo "Master advanced only through unrelated paths; publishing on $latest_sha."
+          GIT_LFS_SKIP_SMUDGE=1 git checkout --detach "$latest_sha"
+
+      - name: Install local Git LFS filters
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs version
+          git lfs install --local
+
+      - name: Overlay and validate candidate changes
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate='${{ runner.temp }}/native-bundle-candidate'
+          bash .github/scripts/overlay-native-artifacts.sh "$candidate"
+          install -m 0644 "$candidate/native/artifacts.manifest.json" native/artifacts.manifest.json
+          bash .github/scripts/sync-native-notices-from-candidate.sh "$candidate"
+
+          mapfile -d '' changed < <(
+            { git diff --name-only -z; git ls-files --others --exclude-standard -z; } | sort -zu
+          )
+          if (( ${#changed[@]} == 0 )); then
+            echo "No native bundle changes were produced."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for path in "${changed[@]}"; do
+            case "$path" in
+              native/artifacts.manifest.json|THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_android/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_windows/windows/lib/*|\
+              packages/simple_torrent_windows/windows/include/*|\
+              packages/simple_torrent_android/android/src/main/jniLibs/*|\
+              packages/simple_torrent_android/android/src/main/cpp/include/*|\
+              packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/*|\
+              packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/*)
+                ;;
+              *)
+                echo "Candidate changed a path outside the generated allowlist: $path" >&2
+                exit 65
+                ;;
+            esac
+          done
+
+          git add -A -- \
+            native/artifacts.manifest.json \
+            THIRD_PARTY_NOTICES.md \
+            packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md \
+            packages/simple_torrent_android/THIRD_PARTY_NOTICES.md \
+            packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md \
+            packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md \
+            packages/simple_torrent_windows/windows/lib \
+            packages/simple_torrent_windows/windows/include \
+            packages/simple_torrent_android/android/src/main/jniLibs \
+            packages/simple_torrent_android/android/src/main/cpp/include \
+            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework
+
+          binary_count=0
+          while IFS= read -r -d '' file; do
+            path="${file#./}"
+            ((binary_count += 1))
+            [[ "$(git check-attr filter -- "$path" | awk '{print $3}')" == "lfs" ]] || {
+              echo "Generated binary is not covered by a Git LFS rule: $path" >&2
+              exit 65
+            }
+            pointer="$(git show ":$path")"
+            [[ "$pointer" == version\ https://git-lfs.github.com/spec/v1$'\n'oid\ sha256:* ]] || {
+              echo "Staged binary is not a Git LFS pointer: $path" >&2
+              exit 65
+            }
+            oid="$(printf '%s\n' "$pointer" | awk '/^oid sha256:/ {sub(/^oid sha256:/, ""); print; exit}')"
+            object=".git/lfs/objects/${oid:0:2}/${oid:2:2}/$oid"
+            [[ "$oid" =~ ^[0-9a-f]{64}$ && -f "$object" ]] || {
+              echo "Git LFS object is missing for $path" >&2
+              exit 65
+            }
+          done < <(find \
+            packages/simple_torrent_windows/windows/lib \
+            packages/simple_torrent_android/android/src/main/jniLibs \
+            packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework \
+            -type f \( -name '*.dll' -o -name '*.lib' -o -name '*.so' -o -name '*.a' \) -print0)
+          (( binary_count > 0 )) || { echo "Candidate contains no generated binaries." >&2; exit 65; }
+          git lfs fsck --pointers
+
+          git diff --cached --check
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Close an obsolete fixed-branch PR after a no-op rebuild
+        if: steps.candidate.outputs.changed == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          pulls="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open -f base=master -f head="$owner:$BOT_BRANCH" -f per_page=100)"
+          matches="$(jq -c --arg repo "$GITHUB_REPOSITORY" --arg ref "$BOT_BRANCH" \
+            '[.[] | select(.head.repo.full_name == $repo and .head.ref == $ref and .base.repo.full_name == $repo and .base.ref == "master")]' <<< "$pulls")"
+          [[ "$(jq 'length' <<< "$matches")" -le 1 ]] || { echo 'Multiple same-repository native bundle PRs found.' >&2; exit 65; }
+          pr_number="$(jq -r '.[0].number // empty' <<< "$matches")"
+          if [[ -n "$pr_number" ]]; then
+            gh pr close "$pr_number" --delete-branch \
+              --comment 'Closing because a fresh authenticated rebuild matches `master` exactly.'
+          fi
+
+      - name: Push fixed bot branch and open or update PR
+        if: steps.candidate.outputs.changed == 'true'
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(native): regenerate bundled libraries'
+
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          remote_sha="$(git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+            ls-remote --heads origin "refs/heads/$BOT_BRANCH" | awk '{print $1}')"
+          if [[ -n "$remote_sha" ]]; then
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+              push --force-with-lease="refs/heads/$BOT_BRANCH:$remote_sha" origin "HEAD:refs/heads/$BOT_BRANCH"
+          else
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+              push origin "HEAD:refs/heads/$BOT_BRANCH"
+          fi
+
+          body_file="$(mktemp)"
+          printf '%s\n' \
+            'This pull request was generated from the canonical native inputs on `master`.' \
+            '' \
+            "Source commit: \`$GITHUB_SHA\`" \
+            '' \
+            'It updates the committed Windows, Android, iOS, and macOS bundles, their provenance manifest, and generated dependency notices. Approve the bot workflow run, then `native-bundle-gate` will exercise all four platforms.' \
+            > "$body_file"
+
+          owner="${GITHUB_REPOSITORY%%/*}"
+          pulls="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open -f base=master -f head="$owner:$BOT_BRANCH" -f per_page=100)"
+          matches="$(jq -c --arg repo "$GITHUB_REPOSITORY" --arg ref "$BOT_BRANCH" \
+            '[.[] | select(.head.repo.full_name == $repo and .head.ref == $ref and .base.repo.full_name == $repo and .base.ref == "master")]' <<< "$pulls")"
+          [[ "$(jq 'length' <<< "$matches")" -le 1 ]] || { echo 'Multiple same-repository native bundle PRs found.' >&2; exit 65; }
+          pr_number="$(jq -r '.[0].number // empty' <<< "$matches")"
+          if [[ -z "$pr_number" ]]; then
+            pr_url="$(gh pr create \
+              --base master \
+              --head "$BOT_BRANCH" \
+              --title 'chore(native): regenerate bundled libraries' \
+              --body-file "$body_file")"
+            pr_number="${pr_url##*/}"
+          else
+            jq -n \
+              --arg title 'chore(native): regenerate bundled libraries' \
+              --rawfile body "$body_file" \
+              '{title: $title, body: $body}' | \
+              gh api --method PATCH \
+                "repos/$GITHUB_REPOSITORY/pulls/$pr_number" --input - >/dev/null
+          fi
+
+          expected_head="$(git rev-parse HEAD)"
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg ref "$BOT_BRANCH" \
+            --arg sha "$expected_head" \
+            '.head.repo.full_name == $repo and .head.ref == $ref and .head.sha == $sha and .base.repo.full_name == $repo and .base.ref == "master"' \
+            <<< "$pr" >/dev/null || {
+              echo "PR #$pr_number does not identify the just-pushed same-repository bot commit." >&2
+              exit 65
+            }
+          printf 'number=%s\n' "$pr_number" >> "$GITHUB_OUTPUT"
+
+      - name: Require the smoke gate before enabling auto-merge
+        if: steps.candidate.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected_head="$(git rev-parse HEAD)"
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ steps.pr.outputs.number }}")"
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg ref "$BOT_BRANCH" \
+            --arg sha "$expected_head" \
+            '.head.repo.full_name == $repo and .head.ref == $ref and .head.sha == $sha and .base.repo.full_name == $repo and .base.ref == "master"' \
+            <<< "$pr" >/dev/null || {
+              echo 'Refusing to enable auto-merge for an unexpected pull request identity.' >&2
+              exit 65
+            }
+          rules="$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/master")" || {
+            echo 'The active master ruleset is not observable; leaving the PR open without auto-merge.' >&2
+            exit 78
+          }
+          if ! jq -e '[.[] | select(
+              .type == "required_status_checks" and
+              .parameters.strict_required_status_checks_policy == true
+            ) | .parameters.required_status_checks[]?.context] | index("native-bundle-gate") != null' \
+            <<< "$rules" >/dev/null; then
+            echo "native-bundle-gate is not configured as a strict required check in an active master ruleset; leaving PR #${{ steps.pr.outputs.number }} open without auto-merge." >&2
+            exit 78
+          fi
+
+          gh pr merge '${{ steps.pr.outputs.number }}' \
+            --auto --squash --delete-branch --match-head-commit "$expected_head"

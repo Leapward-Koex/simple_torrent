@@ -1,0 +1,418 @@
+name: Native bundle smoke
+
+on:
+  pull_request:
+    branches:
+      - master
+
+concurrency:
+  group: native-bundle-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DART_ANALYTICS_DISABLED: "true"
+  FLUTTER_SUPPRESS_ANALYTICS: "true"
+
+jobs:
+  classify:
+    name: Detect bundled native changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      bundle: ${{ steps.changes.outputs.bundle }}
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+          persist-credentials: false
+
+      - name: Classify changed paths
+        id: changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          bundle=false
+          if [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" && "$HEAD_REF" == bot/native-bundle ]]; then
+            bundle=true
+          else
+            while IFS= read -r path; do
+              case "$path" in
+                native/artifacts.manifest.json|\
+                packages/simple_torrent_windows/windows/lib/*|\
+                packages/simple_torrent_windows/windows/include/*|\
+                packages/simple_torrent_android/android/src/main/jniLibs/*|\
+                packages/simple_torrent_android/android/src/main/cpp/include/*|\
+                packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework/*|\
+                packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework/*)
+                  bundle=true
+                  break
+                  ;;
+              esac
+            done < <(git diff --no-renames --name-only --diff-filter=ACMRTD "$BASE_SHA" "$HEAD_SHA")
+          fi
+          printf 'bundle=%s\n' "$bundle" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: Native bundle smoke (${{ matrix.platform }})
+    needs: classify
+    if: needs.classify.outputs.bundle == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            # Keep the consumer build on the same VS 2022 toolchain as generation.
+            runner: windows-2022
+          - platform: android
+            runner: ubuntu-24.04
+          - platform: macos
+            runner: macos-26
+          - platform: ios
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Check out pull-request binaries through LFS
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
+          persist-credentials: false
+
+      - name: Fetch and validate platform Git LFS objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ matrix.platform }}' in
+            windows) prefix='packages/simple_torrent_windows/windows/lib' ;;
+            android) prefix='packages/simple_torrent_android/android/src/main/jniLibs' ;;
+            macos) prefix='packages/simple_torrent_macos/macos/Frameworks/SimpleTorrentNative.xcframework' ;;
+            ios) prefix='packages/simple_torrent_ios/ios/Frameworks/SimpleTorrentNative.xcframework' ;;
+            *) echo 'Unknown smoke platform.' >&2; exit 64 ;;
+          esac
+          git lfs install --local
+          expected_binaries=()
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              *.dll|*.lib|*.so|*.a) expected_binaries+=("$file") ;;
+            esac
+          done < <(git ls-tree -r -z --name-only HEAD -- "$prefix")
+          (( ${#expected_binaries[@]} > 0 )) || { echo "No native binaries found below $prefix." >&2; exit 65; }
+          for file in "${expected_binaries[@]}"; do
+            [[ "$(git check-attr --cached filter -- "$file" | awk '{print $3}')" == lfs ]] || {
+              echo "Committed binary is not covered by Git LFS: $file" >&2
+              exit 65
+            }
+            git show "HEAD:$file" | git lfs pointer --check --strict --stdin || {
+              echo "Committed binary is not a canonical Git LFS pointer: $file" >&2
+              exit 65
+            }
+          done
+          git lfs pull --include="$prefix/**" --exclude=""
+          for file in "${expected_binaries[@]}"; do
+            expected="$(git show "HEAD:$file")"
+            # `git lfs pointer --file` prefixes the canonical three-line
+            # pointer with a human-readable heading; compare only the pointer.
+            actual="$(git lfs pointer --file="$file" 2>/dev/null | tail -n 3)"
+            [[ "$actual" == "$expected" ]] || { echo "LFS content mismatch: $file" >&2; exit 65; }
+          done
+
+      - name: Enable repository shell tools
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
+
+      - name: Read pinned toolchains (Windows)
+        if: matrix.platform == 'windows'
+        id: windows_toolchains
+        shell: pwsh
+        run: |
+          $lock = Get-Content native/dependencies.lock.json -Raw | ConvertFrom-Json
+          "flutter=$($lock.toolchains.flutter)" >> $env:GITHUB_OUTPUT
+          "cmake=$($lock.toolchains.cmake)" >> $env:GITHUB_OUTPUT
+          "ninja=$($lock.toolchains.ninja)" >> $env:GITHUB_OUTPUT
+          "msvc=$($lock.toolchains.msvcToolset)" >> $env:GITHUB_OUTPUT
+          "windows_sdk=$($lock.toolchains.windowsSdk)" >> $env:GITHUB_OUTPUT
+
+      - name: Read pinned toolchains (Unix)
+        if: matrix.platform != 'windows'
+        id: unix_toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in flutter cmake ninja jdk androidNdk xcode; do
+            output_name="$key"
+            [[ "$key" == "androidNdk" ]] && output_name="android_ndk"
+            printf '%s=%s\n' "$output_name" "$(jq -r ".toolchains.${key}" native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Select pinned Xcode
+        if: matrix.platform == 'macos' || matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ steps.unix_toolchains.outputs.xcode }}'
+          major_minor="${expected%.*}"
+          developer_dir="/Applications/Xcode_${major_minor}.app/Contents/Developer"
+          [[ -d "$developer_dir" ]] || { echo "Pinned Xcode is missing: $developer_dir" >&2; exit 69; }
+          printf 'DEVELOPER_DIR=%s\n' "$developer_dir" >> "$GITHUB_ENV"
+          actual="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | awk 'NR == 1 {print $2}')"
+          [[ "$actual" == "$expected" ]] || { echo "Xcode mismatch: $actual" >&2; exit 69; }
+          [[ "$(uname -m)" == "arm64" ]] || { echo "macos-26 must be an ARM64 runner." >&2; exit 69; }
+
+      - name: Install pinned Flutter (Windows)
+        if: matrix.platform == 'windows'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.windows_toolchains.outputs.flutter }}
+          channel: stable
+          cache: false
+
+      - name: Install pinned Flutter (Unix)
+        if: matrix.platform != 'windows'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ steps.unix_toolchains.outputs.flutter }}
+          channel: stable
+          cache: false
+
+      - name: Install pinned CMake and Ninja (Windows)
+        if: matrix.platform == 'windows'
+        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ steps.windows_toolchains.outputs.cmake }}
+          ninjaVersion: ${{ steps.windows_toolchains.outputs.ninja }}
+          useCloudCache: false
+          useLocalCache: false
+
+      - name: Install pinned CMake and Ninja (Unix)
+        if: matrix.platform != 'windows'
+        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ steps.unix_toolchains.outputs.cmake }}
+          ninjaVersion: ${{ steps.unix_toolchains.outputs.ninja }}
+          useCloudCache: false
+          useLocalCache: false
+
+      - name: Select pinned MSVC and Windows SDK
+        if: matrix.platform == 'windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: amd64
+          toolset: ${{ steps.windows_toolchains.outputs.msvc }}
+          sdk: ${{ steps.windows_toolchains.outputs.windows_sdk }}
+          vsversion: "2022"
+
+      - name: Install pinned JDK
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.unix_toolchains.outputs.jdk }}
+
+      - name: Configure Android SDK
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install pinned Android NDK
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "ndk;${{ steps.unix_toolchains.outputs.android_ndk }}"
+          printf 'ANDROID_NDK_ROOT=%s/ndk/%s\n' "$ANDROID_SDK_ROOT" '${{ steps.unix_toolchains.outputs.android_ndk }}' >> "$GITHUB_ENV"
+          printf 'ANDROID_NDK=%s/ndk/%s\n' "$ANDROID_SDK_ROOT" '${{ steps.unix_toolchains.outputs.android_ndk }}' >> "$GITHUB_ENV"
+
+      - name: Assert Windows toolchains
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $flutter = (flutter --version --machine | ConvertFrom-Json).frameworkVersion
+          if ($flutter -ne '${{ steps.windows_toolchains.outputs.flutter }}') { throw "Flutter mismatch: $flutter" }
+          $cmake = ((cmake --version)[0] -split ' ')[2]
+          if ($cmake -ne '${{ steps.windows_toolchains.outputs.cmake }}') { throw "CMake mismatch: $cmake" }
+          $ninja = (ninja --version).Trim()
+          if ($ninja -ne '${{ steps.windows_toolchains.outputs.ninja }}') { throw "Ninja mismatch: $ninja" }
+          if (-not $env:VCToolsVersion.StartsWith('${{ steps.windows_toolchains.outputs.msvc }}.')) {
+            throw "MSVC mismatch: $env:VCToolsVersion"
+          }
+          $sdk = $env:WindowsSDKVersion.TrimEnd('\')
+          if ($sdk -ne '${{ steps.windows_toolchains.outputs.windows_sdk }}') { throw "Windows SDK mismatch: $sdk" }
+
+      - name: Assert Unix toolchains
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(flutter --version --machine | jq -r .frameworkVersion)" == '${{ steps.unix_toolchains.outputs.flutter }}' ]]
+          [[ "$(cmake --version | awk 'NR == 1 {print $3}')" == '${{ steps.unix_toolchains.outputs.cmake }}' ]]
+          [[ "$(ninja --version)" == '${{ steps.unix_toolchains.outputs.ninja }}' ]]
+          if [[ '${{ matrix.platform }}' == android ]]; then
+            java_spec="$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java[.]specification[.]version/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
+            [[ "$java_spec" == '${{ steps.unix_toolchains.outputs.jdk }}' ]]
+            grep -Eq '^Pkg[.]Revision[[:space:]]*=[[:space:]]*${{ steps.unix_toolchains.outputs.android_ndk }}$' \
+              "$ANDROID_NDK_ROOT/source.properties"
+          else
+            [[ "$(xcodebuild -version | awk 'NR == 1 {print $2}')" == '${{ steps.unix_toolchains.outputs.xcode }}' ]]
+          fi
+
+      - name: Verify Windows bundle
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: .\tool\native.ps1 verify windows
+
+      - name: Build and smoke-test Windows consumer
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $env:SIMPLE_TORRENT_TEST_FILE = 'integration_test/plugin_integration_test.dart'
+          $env:SIMPLE_TORRENT_DIAGNOSTICS_SUITE = 'native-init-smoke'
+          .\tool\test-sample.ps1 windows -BuildMode release
+          Remove-Item Env:SIMPLE_TORRENT_TEST_FILE
+          .\tool\test-suspension.ps1 windows -BuildMode debug
+
+      - name: Verify all Android ABIs
+        if: matrix.platform == 'android'
+        shell: bash
+        run: ./tool/native.sh verify android
+
+      - name: Build and smoke-test Android x86_64 consumer
+        if: matrix.platform == 'android'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh android release && ./tool/test-suspension.sh android debug
+
+      - name: Verify macOS ARM bundle
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: ./tool/native.sh verify macos
+
+      - name: Build and smoke-test macOS ARM consumer
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh macos release
+          ./tool/test-suspension.sh macos debug
+
+      - name: Verify iOS ARM bundle
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: ./tool/native.sh verify ios
+
+      - name: Boot an explicit iOS ARM simulator
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          runtime="$(xcrun simctl list runtimes --json | jq -r \
+            --arg version "$simulator_sdk" \
+            '[.runtimes[] | select(
+              .isAvailable == true and
+              (.version == $version or (.version | startswith($version + "."))) and
+              (.identifier | contains("SimRuntime.iOS"))
+            )] | (first // {}) | .identifier // empty')"
+          [[ -n "$runtime" ]] || {
+            echo "No available iOS $simulator_sdk Simulator runtime for the pinned Xcode." >&2
+            exit 69
+          }
+          udid="$(xcrun simctl list devices available --json | jq -r --arg runtime "$runtime" \
+            '(.devices[$runtime] // []) | map(select(.isAvailable == true)) | (first // {}) | .udid // empty')"
+          created=false
+          if [[ -z "$udid" ]]; then
+            device_type="$(xcrun simctl list devicetypes --json | jq -r \
+              '[.devicetypes[] | select(.name | startswith("iPhone"))] | (last // {}) | .identifier // empty')"
+            [[ -n "$device_type" ]] || { echo 'No iPhone Simulator device type.' >&2; exit 69; }
+            udid="$(xcrun simctl create SimpleTorrent-CI "$device_type" "$runtime")"
+            created=true
+          fi
+          xcrun simctl boot "$udid" 2>/dev/null || true
+          xcrun simctl bootstatus "$udid" -b
+          printf 'SIMPLE_TORRENT_DEVICE_ID=%s\n' "$udid" >> "$GITHUB_ENV"
+          printf 'SIMPLE_TORRENT_SIMULATOR_CREATED=%s\n' "$created" >> "$GITHUB_ENV"
+
+      - name: Build iOS Release and run Simulator Debug smoke tests
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh ios release
+          ./tool/test-suspension.sh ios debug
+
+      - name: Shut down iOS Simulator
+        if: always() && matrix.platform == 'ios'
+        shell: bash
+        run: |
+          if [[ -n "${SIMPLE_TORRENT_DEVICE_ID:-}" ]]; then
+            xcrun simctl shutdown "$SIMPLE_TORRENT_DEVICE_ID" 2>/dev/null || true
+            if [[ "${SIMPLE_TORRENT_SIMULATOR_CREATED:-false}" == true ]]; then
+              xcrun simctl delete "$SIMPLE_TORRENT_DEVICE_ID" 2>/dev/null || true
+            fi
+          fi
+
+      - name: Upload smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-bundle-smoke-${{ matrix.platform }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            build/native-*-smoke
+            build/test-sample
+            build/test-suspension
+            build/native-smoke
+
+  native-bundle-gate:
+    name: native-bundle-gate
+    if: always()
+    needs:
+      - classify
+      - smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve aggregate smoke result
+        shell: bash
+        env:
+          BUNDLE: ${{ needs.classify.outputs.bundle }}
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$CLASSIFY_RESULT" != success ]]; then
+            echo "Bundle classification did not succeed: $CLASSIFY_RESULT" >&2
+            exit 1
+          fi
+          if [[ "$BUNDLE" != true ]]; then
+            echo 'No committed native-bundle files changed; the gate passes without platform jobs.'
+            exit 0
+          fi
+          if [[ "$SMOKE_RESULT" != success ]]; then
+            echo "At least one native-bundle platform smoke failed: $SMOKE_RESULT" >&2
+            exit 1
+          fi
+          echo 'All Windows, Android, macOS ARM, and iOS ARM smoke checks passed.'

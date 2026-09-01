@@ -5,14 +5,24 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 const nativeArtifactManifestSchemaVersion = 2;
-const nativeBuilderVersion = '2.0.0';
+const nativeBuilderVersion = '2.1.0';
 const simpleTorrentNativeAbiVersion = 2;
 const nativePlatformProvenanceSchemaVersion = 1;
 const nativeInputFingerprintSchemaVersion = 1;
 
 const _supportedAndroidArchitectures = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
+const _generatedNoticeStart = '<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->';
+const _generatedNoticeEnd = '<!-- END GENERATED NATIVE DEPENDENCIES -->';
 
-enum NativeAction { build, verify, clean, purgeCache, help }
+enum NativeAction {
+  build,
+  verify,
+  clean,
+  purgeCache,
+  assemble,
+  syncMetadata,
+  help,
+}
 
 enum NativeTarget { windows, android, ios, macos }
 
@@ -46,6 +56,9 @@ final class NativeInvocation {
     this.offline = false,
     this.dryRun = false,
     this.purgeName,
+    this.sourceSha,
+    this.manifestFragments = const <NativeTarget, String>{},
+    this.outputPath,
   });
 
   final NativeAction action;
@@ -54,6 +67,9 @@ final class NativeInvocation {
   final bool offline;
   final bool dryRun;
   final String? purgeName;
+  final String? sourceSha;
+  final Map<NativeTarget, String> manifestFragments;
+  final String? outputPath;
 
   static const usage = '''
 Usage:
@@ -61,9 +77,16 @@ Usage:
   tool/native.ps1 verify <windows|android|ios|macos>
   tool/native.ps1 clean <windows|android|ios|macos>
   tool/native.ps1 purge-cache [all|libtorrent|boost|openssl|mozilla-ca-bundle|tools]
+  tool/native.ps1 assemble --source-sha <git-sha>
+    --fragment windows=<manifest> --fragment android=<manifest>
+    --fragment ios=<manifest> --fragment macos=<manifest> [--output <manifest>]
+  tool/native.ps1 sync-metadata
 
 The shell equivalent is tool/native.sh. --arch may be repeated or contain a
 comma-separated list. On Android, --arch replaces the complete staged ABI set.
+Pass --source-sha to build in CI so independently built manifest fragments can
+be authenticated and assembled. The source SHA must be a full 40-character Git
+commit ID.
 Set SIMPLE_TORRENT_NATIVE_TRACE=1 for stack traces.''';
 
   static NativeInvocation parse(List<String> arguments) {
@@ -79,8 +102,84 @@ Set SIMPLE_TORRENT_NATIVE_TRACE=1 for stack traces.''';
       'verify' => NativeAction.verify,
       'clean' => NativeAction.clean,
       'purge-cache' => NativeAction.purgeCache,
+      'assemble' => NativeAction.assemble,
+      'sync-metadata' => NativeAction.syncMetadata,
       _ => throw NativeUsageException('Unknown native command "$actionName".'),
     };
+
+    if (action == NativeAction.syncMetadata) {
+      if (arguments.length != 1) {
+        throw NativeUsageException('sync-metadata accepts no arguments.');
+      }
+      return const NativeInvocation(action: NativeAction.syncMetadata);
+    }
+
+    if (action == NativeAction.assemble) {
+      String? sourceSha;
+      String? outputPath;
+      final fragments = <NativeTarget, String>{};
+      for (var index = 1; index < arguments.length; index++) {
+        final argument = arguments[index];
+        String takeValue(String option) {
+          if (index + 1 >= arguments.length) {
+            throw NativeUsageException('$option requires a value.');
+          }
+          return arguments[++index];
+        }
+
+        if (argument == '--source-sha') {
+          sourceSha = takeValue(argument);
+        } else if (argument.startsWith('--source-sha=')) {
+          sourceSha = argument.substring('--source-sha='.length);
+        } else if (argument == '--output') {
+          outputPath = takeValue(argument);
+        } else if (argument.startsWith('--output=')) {
+          outputPath = argument.substring('--output='.length);
+        } else if (argument == '--fragment') {
+          _parseManifestFragment(takeValue(argument), fragments);
+        } else if (argument.startsWith('--fragment=')) {
+          _parseManifestFragment(
+            argument.substring('--fragment='.length),
+            fragments,
+          );
+        } else {
+          final named = RegExp(
+            r'^--(windows|android|ios|macos)-manifest(?:=(.*))?$',
+          ).firstMatch(argument);
+          if (named == null) {
+            throw NativeUsageException('Unknown option "$argument".');
+          }
+          final value = named.group(2)?.isNotEmpty == true
+              ? named.group(2)!
+              : takeValue('--${named.group(1)}-manifest');
+          _addManifestFragment(
+            NativeTargetName.parse(named.group(1)!),
+            value,
+            fragments,
+          );
+        }
+      }
+      if (sourceSha == null || !_isFullGitSha(sourceSha)) {
+        throw NativeUsageException(
+          'assemble requires --source-sha with a full 40-character Git SHA.',
+        );
+      }
+      final missing = NativeTarget.values
+          .where((target) => !fragments.containsKey(target))
+          .map((target) => target.cliName)
+          .toList();
+      if (missing.isNotEmpty) {
+        throw NativeUsageException(
+          'assemble is missing manifest fragments for ${missing.join(', ')}.',
+        );
+      }
+      return NativeInvocation(
+        action: action,
+        sourceSha: sourceSha.toLowerCase(),
+        manifestFragments: Map.unmodifiable(fragments),
+        outputPath: outputPath,
+      );
+    }
 
     if (action == NativeAction.purgeCache) {
       if (arguments.length > 2) {
@@ -100,6 +199,7 @@ Set SIMPLE_TORRENT_NATIVE_TRACE=1 for stack traces.''';
     final target = NativeTargetName.parse(arguments[1]);
     var offline = false;
     var dryRun = false;
+    String? sourceSha;
     final architectures = <String>[];
     for (var index = 2; index < arguments.length; index++) {
       final argument = arguments[index];
@@ -108,6 +208,11 @@ Set SIMPLE_TORRENT_NATIVE_TRACE=1 for stack traces.''';
           offline = true;
         case '--dry-run':
           dryRun = true;
+        case '--source-sha':
+          if (index + 1 >= arguments.length) {
+            throw NativeUsageException('--source-sha requires a value.');
+          }
+          sourceSha = arguments[++index];
         case '--arch':
           if (index + 1 >= arguments.length) {
             throw NativeUsageException('--arch requires a value.');
@@ -123,6 +228,8 @@ Set SIMPLE_TORRENT_NATIVE_TRACE=1 for stack traces.''';
                   .split(',')
                   .where((value) => value.isNotEmpty),
             );
+          } else if (argument.startsWith('--source-sha=')) {
+            sourceSha = argument.substring('--source-sha='.length);
           } else {
             throw NativeUsageException('Unknown option "$argument".');
           }
@@ -136,15 +243,78 @@ Set SIMPLE_TORRENT_NATIVE_TRACE=1 for stack traces.''';
         '--offline and --dry-run are only valid with build.',
       );
     }
+    if (sourceSha != null && !_isFullGitSha(sourceSha)) {
+      throw NativeUsageException(
+        '--source-sha must be a full 40-character Git commit ID.',
+      );
+    }
+    if (action != NativeAction.build && sourceSha != null) {
+      throw NativeUsageException('--source-sha is only valid with build.');
+    }
     return NativeInvocation(
       action: action,
       target: target,
       architectures: architectures,
       offline: offline,
       dryRun: dryRun,
+      sourceSha: sourceSha?.toLowerCase(),
     );
   }
+
+  static void _parseManifestFragment(
+    String value,
+    Map<NativeTarget, String> fragments,
+  ) {
+    final separator = value.indexOf('=');
+    if (separator <= 0 || separator == value.length - 1) {
+      throw NativeUsageException(
+        '--fragment must use <platform>=<manifest-path>.',
+      );
+    }
+    _addManifestFragment(
+      NativeTargetName.parse(value.substring(0, separator)),
+      value.substring(separator + 1),
+      fragments,
+    );
+  }
+
+  static void _addManifestFragment(
+    NativeTarget target,
+    String path,
+    Map<NativeTarget, String> fragments,
+  ) {
+    if (path.trim().isEmpty) {
+      throw NativeUsageException(
+        'Manifest path for ${target.cliName} may not be empty.',
+      );
+    }
+    if (fragments.containsKey(target)) {
+      throw NativeUsageException(
+        'Duplicate ${target.cliName} manifest fragment.',
+      );
+    }
+    fragments[target] = path;
+  }
 }
+
+final class AppleXcframeworkLibrary {
+  const AppleXcframeworkLibrary({
+    required this.identifier,
+    required this.libraryPath,
+    required this.architectures,
+    required this.platform,
+    this.variant,
+  });
+
+  final String identifier;
+  final String libraryPath;
+  final List<String> architectures;
+  final String platform;
+  final String? variant;
+}
+
+bool _isFullGitSha(String value) =>
+    RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(value);
 
 final class DependencySpec {
   const DependencySpec({
@@ -153,6 +323,7 @@ final class DependencySpec {
     required this.archive,
     required this.url,
     required this.sha256,
+    this.license,
   });
 
   factory DependencySpec.fromJson(String name, Map<String, Object?> json) {
@@ -162,6 +333,7 @@ final class DependencySpec {
       archive: json['archive']! as String,
       url: json['url']! as String,
       sha256: (json['sha256']! as String).toLowerCase(),
+      license: json['license'] as String?,
     );
   }
 
@@ -170,6 +342,7 @@ final class DependencySpec {
   final String archive;
   final String url;
   final String sha256;
+  final String? license;
 }
 
 final class NativeBuilder {
@@ -244,6 +417,14 @@ final class NativeBuilder {
         await clean(invocation.target!);
       case NativeAction.purgeCache:
         await purgeCache(invocation.purgeName ?? 'all');
+      case NativeAction.assemble:
+        await assemble(
+          invocation.manifestFragments,
+          sourceSha: invocation.sourceSha!,
+          outputPath: invocation.outputPath,
+        );
+      case NativeAction.syncMetadata:
+        await syncMetadata();
     }
   }
 
@@ -260,8 +441,12 @@ final class NativeBuilder {
       _result('build', target, ok: true, extra: {'dryRun': true});
       return;
     }
+    if (invocation.sourceSha case final sourceSha?) {
+      await validateSourceShaMatchesCheckout(sourceSha);
+    }
 
     await _requireProgram('cmake');
+    await _assertPinnedBuildToolchains(target, offline: invocation.offline);
     final sources = <String, Directory>{};
     for (final spec in dependencies.values) {
       sources[spec.name] = await _prepareSource(
@@ -292,7 +477,11 @@ final class NativeBuilder {
       case NativeTarget.macos:
         await _buildMacos(sources, architectures, caBundle!);
     }
-    await _writeArtifactManifest(target, architectures);
+    await _writeArtifactManifest(
+      target,
+      architectures,
+      sourceSha: invocation.sourceSha,
+    );
     await verify(target);
     _result('build', target, ok: true, extra: {'architectures': architectures});
   }
@@ -304,8 +493,8 @@ final class NativeBuilder {
     final defaults = switch (target) {
       NativeTarget.windows => const ['x64'],
       NativeTarget.android => _supportedAndroidArchitectures,
-      NativeTarget.ios => const ['arm64', 'sim-arm64', 'sim-x86_64'],
-      NativeTarget.macos => const ['arm64', 'x86_64'],
+      NativeTarget.ios => const ['arm64', 'sim-arm64'],
+      NativeTarget.macos => const ['arm64'],
     };
     final allowed = defaults.toSet();
     final result = requested.isEmpty ? defaults : requested;
@@ -416,6 +605,9 @@ final class NativeBuilder {
         args.addAll([
           '-A',
           'x64',
+          '-T',
+          'version=${toolchains['msvcToolset']}',
+          '-DCMAKE_SYSTEM_VERSION=${toolchains['windowsSdk']}',
           '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
         ]);
       case NativeTarget.android:
@@ -665,7 +857,7 @@ final class NativeBuilder {
     if (partial.existsSync()) await partial.delete();
     _log('Downloading ${spec.name} ${spec.version}');
     final client = HttpClient()
-      ..userAgent = 'simple_torrent-native-builder/2.0.0';
+      ..userAgent = 'simple_torrent-native-builder/$nativeBuilderVersion';
     try {
       final request = await client.getUrl(Uri.parse(spec.url));
       request.followRedirects = true;
@@ -793,6 +985,30 @@ final class NativeBuilder {
       final type = FileSystemEntity.typeSync(target.path, followLinks: false);
       if (type != FileSystemEntityType.notFound) await target.delete();
     });
+  }
+
+  Future<void> _prepareTemporaryFileWithin(
+    File target,
+    Directory parent, {
+    required String operation,
+  }) async {
+    _requireStrictlyWithin(target, parent, operation: operation);
+    final type = FileSystemEntity.typeSync(target.path, followLinks: false);
+    switch (type) {
+      case FileSystemEntityType.notFound:
+        return;
+      case FileSystemEntityType.file:
+        await _deleteFileWithin(target, parent);
+        return;
+      case FileSystemEntityType.link:
+        throw StateError(
+          'Refusing to $operation through a symbolic link: ${target.path}',
+        );
+      default:
+        throw StateError(
+          'Refusing to $operation through a non-file path: ${target.path}',
+        );
+    }
   }
 
   Future<void> _renameEntityWithin(
@@ -1320,10 +1536,7 @@ final class NativeBuilder {
         _join(repositoryRoot.path, 'native', 'include'),
       ]);
     }
-    final simulatorSlices = [
-      merged['sim-arm64'],
-      merged['sim-x86_64'],
-    ].whereType<File>().toList();
+    final simulatorSlices = [merged['sim-arm64']].whereType<File>().toList();
     if (simulatorSlices.isNotEmpty) {
       final simulator = File(
         _join(frameworkBuild.path, 'libsimple_torrent_native_sim.a'),
@@ -1665,8 +1878,9 @@ final class NativeBuilder {
 
   Future<void> _writeArtifactManifest(
     NativeTarget target,
-    List<String> architectures,
-  ) async {
+    List<String> architectures, {
+    String? sourceSha,
+  }) async {
     final manifestFile = File(
       _join(repositoryRoot.path, 'native', 'artifacts.manifest.json'),
     );
@@ -1727,6 +1941,7 @@ final class NativeBuilder {
         artifactInputs: provenance,
       ),
       'files': records,
+      'fragmentSourceSha': ?sourceSha,
     };
     final output = composeArtifactManifest(
       existingManifest: manifest,
@@ -1734,12 +1949,408 @@ final class NativeBuilder {
       target: target,
       targetPlatform: platformRecord,
     );
+    if (sourceSha != null) output['fragmentSourceSha'] = sourceSha;
     final temporary = File('${manifestFile.path}.tmp');
+    _requireStrictlyWithin(
+      manifestFile,
+      repositoryRoot,
+      operation: 'write manifest',
+    );
+    await _prepareTemporaryFileWithin(
+      temporary,
+      repositoryRoot,
+      operation: 'write manifest',
+    );
     await temporary.writeAsString(
       '${const JsonEncoder.withIndent('  ').convert(output)}\n',
     );
     if (manifestFile.existsSync()) await manifestFile.delete();
     await _renameEntityWithin(temporary, manifestFile, repositoryRoot);
+  }
+
+  Future<void> assemble(
+    Map<NativeTarget, String> fragmentPaths, {
+    required String sourceSha,
+    String? outputPath,
+  }) async {
+    await validateSourceShaMatchesCheckout(sourceSha);
+    final fragments = <NativeTarget, File>{};
+    for (final entry in fragmentPaths.entries) {
+      fragments[entry.key] = File(entry.value).isAbsolute
+          ? File(entry.value)
+          : File(_joinRelative(repositoryRoot.path, entry.value));
+    }
+    final manifest = await assembleManifestFragments(
+      fragments,
+      sourceSha: sourceSha,
+    );
+    final output = outputPath == null
+        ? File(_join(repositoryRoot.path, 'native', 'artifacts.manifest.json'))
+        : (File(outputPath).isAbsolute
+              ? File(outputPath)
+              : File(_joinRelative(repositoryRoot.path, outputPath)));
+    _requireStrictlyWithin(output, repositoryRoot, operation: 'write manifest');
+    await output.parent.create(recursive: true);
+    final temporary = File('${output.path}.tmp');
+    await _prepareTemporaryFileWithin(
+      temporary,
+      repositoryRoot,
+      operation: 'write manifest',
+    );
+    await temporary.writeAsString(
+      '${const JsonEncoder.withIndent('  ').convert(manifest)}\n',
+    );
+    if (output.existsSync()) await output.delete();
+    await _renameEntityWithin(temporary, output, repositoryRoot);
+    stdout.writeln(
+      jsonEncode({
+        'ok': true,
+        'command': 'assemble',
+        'output': _relativePath(output.path),
+        'platforms': NativeTarget.values
+            .map((target) => target.cliName)
+            .toList(),
+      }),
+    );
+  }
+
+  Future<Map<String, Object?>> assembleManifestFragments(
+    Map<NativeTarget, File> fragments, {
+    required String sourceSha,
+  }) async {
+    if (!_isFullGitSha(sourceSha)) {
+      throw StateError('Assembly source SHA must be a full Git commit ID.');
+    }
+    if (fragments.length != NativeTarget.values.length ||
+        NativeTarget.values.any((target) => !fragments.containsKey(target))) {
+      throw StateError(
+        'Assembly requires exactly one manifest fragment for every platform.',
+      );
+    }
+    final canonicalFragments = <String>{};
+    final rootProvenance = await expectedArtifactManifestProvenance();
+    final platforms = <String, Object?>{};
+    final hostTools = <String, Object?>{};
+    final allArtifactPaths = <String>{};
+
+    for (final target in NativeTarget.values) {
+      final fragmentFile = fragments[target]!;
+      final fragmentType = FileSystemEntity.typeSync(
+        fragmentFile.path,
+        followLinks: false,
+      );
+      if (fragmentType == FileSystemEntityType.notFound) {
+        throw StateError(
+          '${target.cliName} manifest fragment is missing: ${fragmentFile.path}',
+        );
+      }
+      if (fragmentType != FileSystemEntityType.file) {
+        throw StateError(
+          '${target.cliName} manifest fragment must be a regular file, not a '
+          'link or special entry: ${fragmentFile.path}',
+        );
+      }
+      final resolvedFragment = _canonical(
+        fragmentFile.resolveSymbolicLinksSync(),
+      );
+      if (!canonicalFragments.add(resolvedFragment)) {
+        throw StateError(
+          'A manifest fragment was supplied for more than one platform: '
+          '${fragmentFile.path}',
+        );
+      }
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(await fragmentFile.readAsString());
+      } on FormatException catch (error) {
+        throw StateError(
+          '${target.cliName} manifest fragment is not valid JSON: $error',
+        );
+      }
+      if (decoded is! Map) {
+        throw StateError(
+          '${target.cliName} manifest fragment must contain a JSON object.',
+        );
+      }
+      final fragment = decoded.cast<String, Object?>();
+      final allowedRootKeys = {
+        ...rootProvenance.keys,
+        'fragmentSourceSha',
+        'hostTools',
+        'platforms',
+      };
+      if (!_sameStringSet(fragment.keys, allowedRootKeys)) {
+        throw StateError(
+          '${target.cliName} manifest fragment has missing or unknown '
+          'top-level fields.',
+        );
+      }
+      await validateArtifactManifestProvenance(fragment);
+      if (fragment['fragmentSourceSha'] != sourceSha.toLowerCase()) {
+        throw StateError(
+          '${target.cliName} manifest fragment was not built from '
+          '$sourceSha.',
+        );
+      }
+      final rawPlatforms = fragment['platforms'];
+      if (rawPlatforms is! Map) {
+        throw StateError(
+          '${target.cliName} manifest fragment has no platforms object.',
+        );
+      }
+      final rawPlatform = rawPlatforms[target.cliName];
+      if (rawPlatform is! Map) {
+        throw StateError(
+          '${target.cliName} manifest fragment has no named platform record.',
+        );
+      }
+      final platform = rawPlatform.cast<String, Object?>();
+      if (platform['fragmentSourceSha'] != sourceSha.toLowerCase()) {
+        throw StateError(
+          '${target.cliName} platform record has mixed source provenance.',
+        );
+      }
+      final allowedPlatformKeys = {
+        'architectures',
+        'minimum',
+        'buildType',
+        'opensslLinkage',
+        'features',
+        'buildFlags',
+        'hostTools',
+        'buildProvenance',
+        'files',
+        'fragmentSourceSha',
+      };
+      if (platform.keys.any((key) => !allowedPlatformKeys.contains(key)) ||
+          !allowedPlatformKeys.every(platform.containsKey)) {
+        throw StateError(
+          '${target.cliName} platform record has missing or unknown fields.',
+        );
+      }
+      final expectedArchitectures = normalizedArchitectures(target, const []);
+      final rawArchitectures = platform['architectures'];
+      if (rawArchitectures is! List ||
+          !_jsonValuesEqual(rawArchitectures, expectedArchitectures)) {
+        throw StateError(
+          '${target.cliName} fragment is not a complete release build; '
+          'expected ${expectedArchitectures.join(', ')}.',
+        );
+      }
+      _validateTargetManifestProvenance(target, fragment, platform);
+      await validatePlatformBuildProvenance(target, platform);
+      final records = await _validateFragmentArtifactRecords(target, platform);
+      for (final record in records) {
+        final path = record['path']! as String;
+        if (!allArtifactPaths.add(path)) {
+          throw StateError('Duplicate artifact path across fragments: $path');
+        }
+      }
+      final platformHostTools = (platform['hostTools']! as Map)
+          .cast<String, Object?>();
+      hostTools[target.cliName] = _canonicalJsonValue(platformHostTools);
+      platforms[target.cliName] = {
+        'architectures': expectedArchitectures,
+        'minimum': platform['minimum'],
+        'buildType': platform['buildType'],
+        'opensslLinkage': platform['opensslLinkage'],
+        'features': _canonicalJsonValue(platform['features']),
+        'buildFlags': List<Object?>.from(platform['buildFlags']! as List),
+        'hostTools': _canonicalJsonValue(platformHostTools),
+        'buildProvenance': _canonicalJsonValue(platform['buildProvenance']),
+        'files': records,
+      };
+    }
+
+    // fragmentSourceSha is intentionally not persisted. It authenticates the
+    // fan-in operation, while the canonical input fingerprints in each
+    // platform record provide durable provenance without making a later
+    // identical manual rebuild produce a manifest-only diff.
+    return {...rootProvenance, 'hostTools': hostTools, 'platforms': platforms};
+  }
+
+  Future<List<Map<String, Object?>>> _validateFragmentArtifactRecords(
+    NativeTarget target,
+    Map<String, Object?> platform,
+  ) async {
+    final rawFiles = platform['files'];
+    if (rawFiles is! List ||
+        rawFiles.isEmpty ||
+        rawFiles.any((record) => record is! Map)) {
+      throw StateError(
+        '${target.cliName} fragment has invalid or empty file records.',
+      );
+    }
+    final records = <Map<String, Object?>>[];
+    for (final rawRecord in rawFiles.cast<Map>()) {
+      final record = rawRecord.cast<String, Object?>();
+      if (!_sameStringSet(record.keys, const ['path', 'size', 'sha256']) ||
+          record['path'] is! String ||
+          record['size'] is! int ||
+          (record['size']! as int) < 0 ||
+          record['sha256'] is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(record['sha256']! as String)) {
+        throw StateError(
+          '${target.cliName} fragment contains a malformed file record.',
+        );
+      }
+      records.add({
+        'path': validateArtifactRelativePath(record['path']! as String),
+        'size': record['size'],
+        'sha256': record['sha256'],
+      });
+    }
+    records.sort(
+      (left, right) =>
+          (left['path']! as String).compareTo(right['path']! as String),
+    );
+    await validateStagedArtifactInventory(
+      target,
+      records.map((record) => record['path']! as String),
+    );
+    for (final record in records) {
+      final relative = record['path']! as String;
+      final file = File(_joinRelative(repositoryRoot.path, relative));
+      if (!file.existsSync() ||
+          !_pathIsWithin(
+            repositoryRoot.path,
+            file.resolveSymbolicLinksSync(),
+          )) {
+        throw StateError(
+          'Artifact is missing or escapes the repository: $relative',
+        );
+      }
+      if (await file.length() != record['size']) {
+        throw StateError('Artifact size mismatch during assembly: $relative');
+      }
+      if (await Sha256.file(file) != record['sha256']) {
+        throw StateError(
+          'Artifact checksum mismatch during assembly: $relative',
+        );
+      }
+    }
+    return records;
+  }
+
+  Future<void> syncMetadata() async {
+    _validateDeclaredLicenses();
+    final noticeTargets = <String, NativeTarget?>{
+      'THIRD_PARTY_NOTICES.md': null,
+      'packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md':
+          NativeTarget.windows,
+      'packages/simple_torrent_android/THIRD_PARTY_NOTICES.md':
+          NativeTarget.android,
+      'packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md': NativeTarget.ios,
+      'packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md':
+          NativeTarget.macos,
+    };
+    for (final entry in noticeTargets.entries) {
+      final file = File(_joinRelative(repositoryRoot.path, entry.key));
+      if (!file.existsSync()) {
+        throw StateError('Third-party notice is missing: ${entry.key}');
+      }
+      final rawContent = await file.readAsString();
+      final content = rawContent
+          .replaceAll('\r\n', '\n')
+          .replaceAll('\r', '\n');
+      final firstStart = content.indexOf(_generatedNoticeStart);
+      final firstEnd = content.indexOf(_generatedNoticeEnd);
+      if (firstStart < 0 ||
+          firstEnd < firstStart ||
+          content.indexOf(_generatedNoticeStart, firstStart + 1) >= 0 ||
+          content.indexOf(_generatedNoticeEnd, firstEnd + 1) >= 0) {
+        throw StateError(
+          '${entry.key} must contain exactly one bounded generated native '
+          'dependency table.',
+        );
+      }
+      final replacement =
+          '$_generatedNoticeStart\n\n'
+          '${renderNativeDependencyTable(entry.value)}\n\n'
+          '$_generatedNoticeEnd';
+      final updated = content.replaceRange(
+        firstStart,
+        firstEnd + _generatedNoticeEnd.length,
+        replacement,
+      );
+      if (updated != rawContent) await file.writeAsString(updated);
+    }
+    stdout.writeln(
+      jsonEncode({
+        'ok': true,
+        'command': 'sync-metadata',
+        'files': noticeTargets.keys.toList(),
+      }),
+    );
+  }
+
+  String renderNativeDependencyTable(NativeTarget? target) {
+    _validateDeclaredLicenses();
+    final rows = <List<String>>[
+      [
+        'libtorrent',
+        dependencies['libtorrent']!.version,
+        dependencies['libtorrent']!.license!,
+      ],
+      [
+        'Boost',
+        dependencies['boost']!.version,
+        dependencies['boost']!.license!,
+      ],
+      [
+        'OpenSSL',
+        dependencies['openssl']!.version,
+        dependencies['openssl']!.license!,
+      ],
+      if (target == null || target == NativeTarget.android)
+        [
+          'LLVM libc++ / libc++abi${target == null ? ' (Android only)' : ''}',
+          'Android NDK ${toolchains['androidNdk']}',
+          'Apache-2.0 WITH LLVM-exception',
+        ],
+      if (target == null ||
+          target == NativeTarget.ios ||
+          target == NativeTarget.macos)
+        [
+          'Mozilla CA certificate bundle',
+          assets['mozilla-ca-bundle']!.version,
+          assets['mozilla-ca-bundle']!.license!,
+        ],
+    ];
+    return [
+      '| Component | Pinned version | License (SPDX) |',
+      '| --- | --- | --- |',
+      ...rows.map((row) => '| ${row.join(' | ')} |'),
+    ].join('\n');
+  }
+
+  void _validateDeclaredLicenses() {
+    const reviewedLicenses = <String, String>{
+      'libtorrent': 'BSD-3-Clause',
+      'boost': 'BSL-1.0',
+      'openssl': 'Apache-2.0',
+      'mozilla-ca-bundle': 'MPL-2.0',
+    };
+    for (final entry in reviewedLicenses.entries) {
+      final spec = dependencies[entry.key] ?? assets[entry.key];
+      if (spec == null || spec.license != entry.value) {
+        throw StateError(
+          'License identifier for ${entry.key} is missing or changed '
+          '(expected ${entry.value}, found ${spec?.license ?? 'none'}). '
+          'Review the complete upstream license text before updating the '
+          'builder\'s accepted license identifier.',
+        );
+      }
+    }
+    for (final entry in [...dependencies.entries, ...assets.entries]) {
+      if (!reviewedLicenses.containsKey(entry.key) ||
+          entry.value.license == null) {
+        throw StateError(
+          'Unknown license metadata for ${entry.key}; review the complete '
+          'license text before generating notices.',
+        );
+      }
+    }
   }
 
   Map<String, Object?> _nativeFeatures(NativeTarget target) => {
@@ -1801,66 +2412,102 @@ final class NativeBuilder {
       'CMAKE_OSX_DEPLOYMENT_TARGET=${toolchains['iosMinimum']}',
     if (target == NativeTarget.macos)
       'CMAKE_OSX_DEPLOYMENT_TARGET=${toolchains['macosMinimum']}',
+    if (target == NativeTarget.ios || target == NativeTarget.macos)
+      'ZERO_AR_DATE=1',
   ];
 
   Future<Map<String, Object?>> _hostToolVersions(NativeTarget target) async {
-    final result = <String, Object?>{};
-    final cmake = await _captureVersion(
+    return expectedHostTools(target);
+  }
+
+  Map<String, Object?> expectedHostTools(NativeTarget target) => {
+    'cmake': toolchains['cmake'],
+    'ninja': toolchains['ninja'],
+    if (target == NativeTarget.windows) ...{
+      'msvcToolset': toolchains['msvcToolset'],
+      'windowsSdk': toolchains['windowsSdk'],
+    },
+    if (target == NativeTarget.android) 'androidNdk': toolchains['androidNdk'],
+    if (target == NativeTarget.ios || target == NativeTarget.macos)
+      'xcode': toolchains['xcode'],
+  };
+
+  Future<void> _assertPinnedBuildToolchains(
+    NativeTarget target, {
+    required bool offline,
+  }) async {
+    final cmakeVersion = await _captureVersion(
       Platform.isWindows ? 'cmake.exe' : 'cmake',
       const ['--version'],
     );
-    if (cmake != null) result['cmake'] = cmake;
-
-    if (target == NativeTarget.windows && Platform.isWindows) {
-      final environment = await _visualStudioEnvironment();
-      final toolset = environment['VCTOOLSVERSION']?.trim();
-      final sdk = environment['WINDOWSSDKVERSION']?.replaceAll('\\', '').trim();
-      if (toolset != null && toolset.isNotEmpty) {
-        result['msvcToolset'] = toolset;
-      }
-      if (sdk != null && sdk.isNotEmpty) result['windowsSdk'] = sdk;
-    } else if (target == NativeTarget.android) {
-      final ndk = await _findAndroidNdk(offline: true);
-      final host = Platform.isWindows
-          ? 'windows-x86_64'
-          : Platform.isMacOS
-          ? 'darwin-x86_64'
-          : 'linux-x86_64';
-      final clang = _join(
-        ndk.path,
-        'toolchains',
-        'llvm',
-        'prebuilt',
-        host,
-        'bin',
-        Platform.isWindows ? 'clang.exe' : 'clang',
+    _requireVersionMarker(
+      'CMake',
+      cmakeVersion,
+      'cmake version ${toolchains['cmake']}',
+    );
+    final ninjaVersion = await _captureVersion(
+      Platform.isWindows ? 'ninja.exe' : 'ninja',
+      const ['--version'],
+    );
+    if (ninjaVersion?.trim() != toolchains['ninja']) {
+      throw StateError(
+        'Ninja ${toolchains['ninja']} is required; found '
+        '${ninjaVersion ?? 'no executable'}.',
       );
-      result['androidNdk'] = toolchains['androidNdk'];
-      final clangVersion = await _captureVersion(clang, const ['--version']);
-      if (clangVersion != null) result['clang'] = clangVersion;
-      if (Platform.isWindows) {
-        final gitVersion = await _captureVersion('git.exe', const [
-          '--version',
-        ]);
-        if (gitVersion != null) result['git'] = gitVersion;
-        final perl = await _findGitPosixPerl();
-        final perlVersion = await _captureVersion(perl.path, const [
-          '-e',
-          r'print "$^O $^V"',
-        ]);
-        if (perlVersion != null) result['posixPerl'] = perlVersion;
-      }
-    } else if ((target == NativeTarget.ios || target == NativeTarget.macos) &&
-        Platform.isMacOS) {
-      final xcode = await _captureVersion('xcodebuild', const ['-version']);
-      final clang = await _captureVersion('xcrun', const [
-        'clang',
-        '--version',
-      ]);
-      if (xcode != null) result['xcode'] = xcode;
-      if (clang != null) result['clang'] = clang;
     }
-    return result;
+
+    switch (target) {
+      case NativeTarget.windows:
+        if (!Platform.isWindows) return;
+        final environment = await _visualStudioEnvironment();
+        final actualMsvc = environment['VCTOOLSVERSION']?.trim() ?? '';
+        final expectedMsvc = toolchains['msvcToolset']! as String;
+        if (actualMsvc != expectedMsvc &&
+            !actualMsvc.startsWith('$expectedMsvc.')) {
+          throw StateError(
+            'MSVC $expectedMsvc is required; vcvars selected $actualMsvc.',
+          );
+        }
+        final actualSdk =
+            environment['WINDOWSSDKVERSION']?.replaceAll('\\', '').trim() ?? '';
+        if (actualSdk != toolchains['windowsSdk']) {
+          throw StateError(
+            'Windows SDK ${toolchains['windowsSdk']} is required; vcvars '
+            'selected $actualSdk.',
+          );
+        }
+        return;
+      case NativeTarget.android:
+        await _findAndroidNdk(offline: offline);
+        return;
+      case NativeTarget.ios:
+      case NativeTarget.macos:
+        _requireAppleHost(target.cliName);
+        final xcodeVersion = await _captureVersion('xcodebuild', const [
+          '-version',
+        ]);
+        _requireVersionMarker(
+          'Xcode',
+          xcodeVersion,
+          'Xcode ${toolchains['xcode']}',
+        );
+        return;
+    }
+  }
+
+  void _requireVersionMarker(
+    String tool,
+    String? actual,
+    String expectedMarker,
+  ) {
+    if (actual == null ||
+        !actual
+            .split(RegExp(r'[\r\n|]+'))
+            .any((line) => line.trim() == expectedMarker)) {
+      throw StateError(
+        '$tool $expectedMarker is required; found ${actual ?? 'no executable'}.',
+      );
+    }
   }
 
   Future<String?> _captureVersion(
@@ -1940,10 +2587,10 @@ final class NativeBuilder {
         '${target.cliName}.',
       );
     }
-    if (target == NativeTarget.android &&
-        platformHostTools['androidNdk'] != toolchains['androidNdk']) {
+    if (!_jsonValuesEqual(platformHostTools, expectedHostTools(target))) {
       throw StateError(
-        'Artifact manifest Android NDK does not match the pinned toolchain.',
+        'Artifact manifest ${target.cliName} host tools do not match the '
+        'pinned toolchains.',
       );
     }
   }
@@ -1974,6 +2621,16 @@ final class NativeBuilder {
       );
     }
     final platformRecord = platform.cast<String, Object?>();
+    final fragmentSourceSha = manifest['fragmentSourceSha'];
+    if (fragmentSourceSha != null &&
+        (fragmentSourceSha is! String ||
+            !_isFullGitSha(fragmentSourceSha) ||
+            platformRecord['fragmentSourceSha'] != fragmentSourceSha)) {
+      throw StateError(
+        'Artifact manifest fragment source provenance is inconsistent for '
+        '${target.cliName}.',
+      );
+    }
     _validateTargetManifestProvenance(target, manifest, platformRecord);
     await validatePlatformBuildProvenance(target, platformRecord);
     final rawFiles = platformRecord['files'];
@@ -2083,7 +2740,7 @@ final class NativeBuilder {
     ];
     final identity = <String, Object?>{
       'schemaVersion': 1,
-      'builderVersion': '2.0.0',
+      'builderVersion': nativeBuilderVersion,
       'dependencyVersion': dependencies['openssl']!.version,
       'dependencySha256': dependencies['openssl']!.sha256,
       'target': target.cliName,
@@ -2338,7 +2995,7 @@ final class NativeBuilder {
       libtorrent.path,
       libssl.path,
       libcrypto.path,
-    ]);
+    ], environment: environment);
     return merged;
   }
 
@@ -2356,6 +3013,8 @@ final class NativeBuilder {
     }
     final result = await _run(vswhere.path, [
       '-latest',
+      '-version',
+      '[17.0,18.0)',
       '-products',
       '*',
       '-requires',
@@ -2379,6 +3038,8 @@ final class NativeBuilder {
       '/c',
       'call',
       vcvars.path,
+      '-vcvars_ver=${toolchains['msvcToolset']}',
+      '-winsdk=${toolchains['windowsSdk']}',
       '>nul',
       '&&',
       'set',
@@ -2672,8 +3333,49 @@ final class NativeBuilder {
     final properties = File(_join(directory.path, 'source.properties'));
     if (!properties.existsSync()) return false;
     final content = await properties.readAsString();
-    return RegExp(r'Pkg\.Revision\s*=\s*' + RegExp.escape(revision))
-        .hasMatch(content);
+    return RegExp(
+      r'^Pkg\.Revision\s*=\s*' + RegExp.escape(revision) + r'\s*$',
+      multiLine: true,
+    ).hasMatch(content);
+  }
+
+  Future<void> validateSourceShaMatchesCheckout(String sourceSha) async {
+    if (!_isFullGitSha(sourceSha)) {
+      throw StateError('Source SHA must be a full Git commit ID.');
+    }
+    ProcessResult result;
+    try {
+      result = await Process.run(
+        'git',
+        [
+          '-c',
+          "safe.directory=${repositoryRoot.absolute.path.replaceAll('\\', '/')}",
+          'rev-parse',
+          '--verify',
+          'HEAD',
+        ],
+        workingDirectory: repositoryRoot.path,
+        runInShell: false,
+      );
+    } on ProcessException catch (error) {
+      throw StateError(
+        'Git is required to authenticate native fragment source SHAs: $error',
+      );
+    }
+    final checkoutSha = '${result.stdout}'.trim().toLowerCase();
+    if (result.exitCode != 0 || !_isFullGitSha(checkoutSha)) {
+      throw StateError(
+        'Cannot resolve the checked-out Git commit for native generation: '
+                '${result.stderr}'
+            .trim(),
+      );
+    }
+    if (checkoutSha != sourceSha.toLowerCase()) {
+      throw StateError(
+        'Native generation source SHA $sourceSha does not match checked-out '
+        'commit $checkoutSha.',
+      );
+    }
   }
 
   Future<String> _findNinja() async {
@@ -3110,20 +3812,75 @@ final class NativeBuilder {
 
   Future<void> _verifyApple(NativeTarget target, List<Map> records) async {
     _requireAppleHost(target.cliName);
-    final binaryRecords = records.cast<Map<String, Object?>>().where(
-      (record) => (record['path']! as String).endsWith('.a'),
-    );
+    final typedRecords = records.cast<Map<String, Object?>>();
+    final binaryRecords = typedRecords
+        .where((record) => (record['path']! as String).endsWith('.a'))
+        .toList();
     if (binaryRecords.isEmpty) {
       throw StateError(
         '${target.cliName} XCFramework contains no static library.',
       );
     }
-    for (final record in binaryRecords) {
-      final file = File(
-        _joinRelative(repositoryRoot.path, record['path']! as String),
+    final plistRecords = typedRecords
+        .where((record) => (record['path']! as String).endsWith('/Info.plist'))
+        .toList();
+    if (plistRecords.length != 1) {
+      throw StateError(
+        '${target.cliName} XCFramework must contain exactly one Info.plist.',
       );
-      if (Platform.isMacOS) {
-        await _run('xcrun', ['lipo', '-info', file.path]);
+    }
+    final plist = File(
+      _joinRelative(
+        repositoryRoot.path,
+        plistRecords.single['path']! as String,
+      ),
+    );
+    final plistResult = await _run('/usr/bin/plutil', [
+      '-convert',
+      'json',
+      '-o',
+      '-',
+      plist.path,
+    ], capture: true);
+    final decodedPlist = jsonDecode(plistResult.stdout as String);
+    if (decodedPlist is! Map) {
+      throw StateError('${plist.path} did not decode to a plist dictionary.');
+    }
+    final libraries = validateAppleXcframeworkMetadata(
+      target,
+      decodedPlist.cast<String, Object?>(),
+    );
+    final frameworkRoot = plist.parent;
+    final expectedBinaryPaths = <String>{};
+    for (final library in libraries) {
+      final relativeWithinFramework = validateArtifactRelativePath(
+        '${library.identifier}/${library.libraryPath}',
+      );
+      final file = File(
+        _joinRelative(frameworkRoot.path, relativeWithinFramework),
+      );
+      if (!_pathIsWithin(frameworkRoot.path, file.absolute.path)) {
+        throw StateError(
+          'XCFramework library path escapes its bundle: '
+          '$relativeWithinFramework',
+        );
+      }
+      expectedBinaryPaths.add(_canonical(file.path));
+      final lipoResult = await _run('xcrun', [
+        'lipo',
+        '-archs',
+        file.path,
+      ], capture: true);
+      final actualArchitectures = parseLipoArchitectures(
+        lipoResult.stdout as String,
+      );
+      if (!_sameStringSet(actualArchitectures, library.architectures) ||
+          actualArchitectures.length != library.architectures.length) {
+        throw StateError(
+          '${file.path} has lipo architectures '
+          '${actualArchitectures.join(', ')}, but Info.plist declares '
+          '${library.architectures.join(', ')}.',
+        );
       }
       final bytes = await file.readAsBytes();
       _verifyBinaryStrings(file, bytes);
@@ -3140,17 +3897,25 @@ final class NativeBuilder {
         );
       }
     }
+    final manifestBinaryPaths = binaryRecords
+        .map(
+          (record) => _canonical(
+            _joinRelative(repositoryRoot.path, record['path']! as String),
+          ),
+        )
+        .toSet();
+    if (!_sameStringSet(manifestBinaryPaths, expectedBinaryPaths) ||
+        manifestBinaryPaths.length != binaryRecords.length) {
+      throw StateError(
+        '${target.cliName} XCFramework libraries do not exactly match '
+        'Info.plist.',
+      );
+    }
   }
 
   void _verifyBinaryStrings(File file, Uint8List bytes) {
     final strings = latin1.decode(bytes, allowInvalid: true);
-    for (final marker in [
-      'simple_torrent_native/2.0.0',
-      'libtorrent/2.0.12',
-      'OpenSSL/3.5.8',
-      'Boost/1_91',
-      'libtorrent=2.0.12;boost=1_91;openssl=3.5.8',
-    ]) {
+    for (final marker in binaryVersionMarkers()) {
       if (!strings.contains(marker)) {
         throw StateError(
           '${file.path} does not embed version marker "$marker".',
@@ -3164,6 +3929,27 @@ final class NativeBuilder {
         lower.contains(r'c:\dev\simple_torrent')) {
       throw StateError('${file.path} embeds a developer-specific source path.');
     }
+  }
+
+  List<String> binaryVersionMarkers() {
+    final libtorrent = dependencies['libtorrent']!.version;
+    final openssl = dependencies['openssl']!.version;
+    final boostParts = dependencies['boost']!.version.split('.');
+    if (boostParts.length < 2 ||
+        boostParts.take(2).any((part) => int.tryParse(part) == null)) {
+      throw StateError(
+        'Pinned Boost version cannot be converted to BOOST_LIB_VERSION: '
+        '${dependencies['boost']!.version}',
+      );
+    }
+    final boost = '${boostParts[0]}_${boostParts[1]}';
+    return [
+      'simple_torrent_native/2.0.0',
+      'libtorrent/$libtorrent',
+      'OpenSSL/$openssl',
+      'Boost/$boost',
+      'libtorrent=$libtorrent;boost=$boost;openssl=$openssl',
+    ];
   }
 
   void _verifyRequiredSuspensionExports(File file, String exportTable) {
@@ -3194,9 +3980,11 @@ final class NativeBuilder {
   Map<String, String> _appleDeploymentEnvironment(NativeTarget target) =>
       switch (target) {
         NativeTarget.ios => {
+          'ZERO_AR_DATE': '1',
           'IPHONEOS_DEPLOYMENT_TARGET': toolchains['iosMinimum']! as String,
         },
         NativeTarget.macos => {
+          'ZERO_AR_DATE': '1',
           'MACOSX_DEPLOYMENT_TARGET': toolchains['macosMinimum']! as String,
         },
         NativeTarget.windows || NativeTarget.android => const {},
@@ -3226,12 +4014,10 @@ String _opensslTarget(NativeTarget target, String architecture) {
     NativeTarget.ios => switch (architecture) {
       'arm64' => 'ios64-xcrun',
       'sim-arm64' => 'iossimulator-arm64-xcrun',
-      'sim-x86_64' => 'iossimulator-x86_64-xcrun',
       _ => throw ArgumentError.value(architecture),
     },
     NativeTarget.macos => switch (architecture) {
       'arm64' => 'darwin64-arm64-cc',
-      'x86_64' => 'darwin64-x86_64-cc',
       _ => throw ArgumentError.value(architecture),
     },
   };
@@ -3284,6 +4070,90 @@ String _joinRelative(String root, String relative) => [
 
 String _basename(String path) =>
     path.replaceAll('\\', '/').split('/').where((part) => part.isNotEmpty).last;
+
+List<String> parseLipoArchitectures(String output) => output
+    .trim()
+    .split(RegExp(r'\s+'))
+    .where((value) => value.isNotEmpty)
+    .toList(growable: false);
+
+List<AppleXcframeworkLibrary> validateAppleXcframeworkMetadata(
+  NativeTarget target,
+  Map<String, Object?> plist,
+) {
+  if (target != NativeTarget.ios && target != NativeTarget.macos) {
+    throw StateError('XCFramework metadata is only valid for Apple targets.');
+  }
+  final rawLibraries = plist['AvailableLibraries'];
+  if (rawLibraries is! List ||
+      rawLibraries.isEmpty ||
+      rawLibraries.any((value) => value is! Map)) {
+    throw StateError('XCFramework Info.plist has invalid AvailableLibraries.');
+  }
+  final libraries = <AppleXcframeworkLibrary>[];
+  final identifiers = <String>{};
+  for (final raw in rawLibraries.cast<Map>()) {
+    final value = raw.cast<String, Object?>();
+    final identifier = value['LibraryIdentifier'];
+    final libraryPath = value['LibraryPath'];
+    final platform = value['SupportedPlatform'];
+    final variant = value['SupportedPlatformVariant'];
+    final rawArchitectures = value['SupportedArchitectures'];
+    if (identifier is! String ||
+        identifier.isEmpty ||
+        identifier.contains('/') ||
+        identifier.contains('\\') ||
+        !identifiers.add(identifier) ||
+        libraryPath is! String ||
+        !libraryPath.endsWith('.a') ||
+        platform is! String ||
+        (variant != null && variant is! String) ||
+        (variant is String && variant.isEmpty) ||
+        rawArchitectures is! List ||
+        rawArchitectures.isEmpty ||
+        rawArchitectures.any((arch) => arch is! String)) {
+      throw StateError('XCFramework Info.plist has a malformed library entry.');
+    }
+    validateArtifactRelativePath(libraryPath);
+    final architectures = rawArchitectures.cast<String>();
+    if (architectures.toSet().length != architectures.length) {
+      throw StateError(
+        'XCFramework library $identifier declares duplicate architectures.',
+      );
+    }
+    libraries.add(
+      AppleXcframeworkLibrary(
+        identifier: identifier,
+        libraryPath: libraryPath,
+        architectures: List.unmodifiable(architectures),
+        platform: platform,
+        variant: variant as String?,
+      ),
+    );
+  }
+
+  String signature(AppleXcframeworkLibrary library) {
+    final architectures = [...library.architectures]..sort();
+    return '${library.platform}|${library.variant ?? ''}|'
+        '${architectures.join(',')}';
+  }
+
+  final actual = libraries.map(signature).toSet();
+  final expected = switch (target) {
+    NativeTarget.ios => const {'ios||arm64', 'ios|simulator|arm64'},
+    NativeTarget.macos => const {'macos||arm64'},
+    NativeTarget.windows || NativeTarget.android => const <String>{},
+  };
+  if (actual.length != libraries.length ||
+      actual.length != expected.length ||
+      !actual.containsAll(expected)) {
+    throw StateError(
+      '${target.cliName} XCFramework has incorrect platform, variant, or '
+      'architecture metadata; expected ${expected.join(' and ')}.',
+    );
+  }
+  return libraries;
+}
 
 String validateArtifactRelativePath(String relative) {
   final normalized = relative.replaceAll('\\', '/');
@@ -3383,6 +4253,20 @@ bool _jsonValuesEqual(Object? left, Object? right) {
     return true;
   }
   return left == right;
+}
+
+Object? _canonicalJsonValue(Object? value) {
+  if (value is Map) {
+    final keys = value.keys.map((key) => key.toString()).toList()..sort();
+    return <String, Object?>{
+      for (final key in keys) key: _canonicalJsonValue(value[key]),
+    };
+  }
+
+  if (value is List) {
+    return value.map(_canonicalJsonValue).toList(growable: false);
+  }
+  return value;
 }
 
 bool _pathIsWithin(String root, String candidate) {

@@ -48,6 +48,13 @@
     }
   },
   "toolchains": {
+    "flutter": "3.47.0",
+    "cmake": "3.29.3",
+    "ninja": "1.12.1",
+    "jdk": "17",
+    "msvcToolset": "14.44",
+    "windowsSdk": "10.0.26100.0",
+    "xcode": "26.4.1",
     "androidNdk": "29.0.13113456",
     "androidApi": 24,
     "windowsMinimum": "10.0",
