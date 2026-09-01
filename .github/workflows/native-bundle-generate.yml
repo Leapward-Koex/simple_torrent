@@ -141,7 +141,14 @@ jobs:
             Tee-Object -FilePath build/native/ci-logs/windows.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item native/artifacts.manifest.json build/native/fragments/windows.manifest.json
-          Set-Content -NoNewline build/native/fragments/windows.source-sha $env:GITHUB_SHA
+          $sourceShaPath = 'build/native/fragments/windows.source-sha'
+          Set-Content -LiteralPath $sourceShaPath -Value $env:GITHUB_SHA -NoNewline -Encoding utf8NoBOM
+          if (
+            -not (Test-Path -LiteralPath $sourceShaPath -PathType Leaf) -or
+            (Get-Content -LiteralPath $sourceShaPath -Raw) -cne $env:GITHUB_SHA
+          ) {
+            throw 'Windows fragment source SHA was not written correctly.'
+          }
 
       - name: Upload Windows fragment
         if: always()

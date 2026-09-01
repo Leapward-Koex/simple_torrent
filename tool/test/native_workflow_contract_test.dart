@@ -243,7 +243,21 @@ void main() {
           'ios',
           'macos',
         ].every((platform) => generation.contains('$platform.source-sha')) &&
-        generation.contains('Check fragment source SHAs'),
+        generation.contains('Check fragment source SHAs') &&
+        generation.contains(
+          r"$sourceShaPath = 'build/native/fragments/windows.source-sha'",
+        ) &&
+        generation.contains(
+          r'Set-Content -LiteralPath $sourceShaPath -Value $env:GITHUB_SHA '
+          '-NoNewline -Encoding utf8NoBOM',
+        ) &&
+        generation.contains(
+          r'(Get-Content -LiteralPath $sourceShaPath -Raw) '
+          r'-cne $env:GITHUB_SHA',
+        ) &&
+        !generation.contains(
+          r'Set-Content -NoNewline build/native/fragments/windows.source-sha',
+        ),
     'assembly names all four fragments and refreshes notices':
         ['windows', 'android', 'ios', 'macos'].every(
           (platform) => generation.contains(
