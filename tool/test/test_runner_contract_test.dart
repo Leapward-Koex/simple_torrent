@@ -8,6 +8,15 @@ void main() {
   final powershellSuspension = File('tool/test-suspension.ps1')
       .readAsStringSync();
   final shellSuspension = File('tool/test-suspension.sh').readAsStringSync();
+  final iosXcTestBridge = File(
+    'packages/simple_torrent/example/ios/RunnerTests/RunnerTests.m',
+  ).readAsStringSync();
+  final iosScheme = File(
+    'packages/simple_torrent/example/ios/Runner.xcodeproj/'
+    'xcshareddata/xcschemes/Runner.xcscheme',
+  ).readAsStringSync();
+  final iosPodfile = File('packages/simple_torrent/example/ios/Podfile')
+      .readAsStringSync();
   final transferSuspension = File(
     'packages/simple_torrent/example/integration_test/'
     'transfer_suspension_test.dart',
@@ -72,9 +81,55 @@ void main() {
     'shell performs an unsigned iOS device Release link build': shell.contains(
       'build ios --release --no-codesign',
     ),
-    'shell runs iOS Release requests in Debug on the simulator': shell.contains(
-      r'[[ "$build_mode" == "release" && "$platform" != "ios" ]]',
-    ),
+    'shell runs iOS integration tests through app-hosted Debug XCTest':
+        shell.contains('test_execution_mode="xctest-debug"') &&
+        shell.contains('xcodebuild test') &&
+        shell.contains('-configuration Debug') &&
+        shell.contains('-sdk iphonesimulator') &&
+        shell.contains(r'-destination "platform=iOS Simulator,id=$device_id"'),
+    'shell configures the selected Dart target before XCTest':
+        shell.contains('build ios') &&
+        shell.contains('--debug') &&
+        shell.contains('--simulator') &&
+        shell.contains('--config-only') &&
+        shell.contains(r'"$test_file"') &&
+        shell.contains(r'"${define_arguments[@]}"'),
+    'shell serializes XCTest and retains a result bundle':
+        shell.contains(r'-resultBundlePath "$xctest_result_path"') &&
+        shell.contains('-parallel-testing-enabled NO') &&
+        shell.contains('-maximum-parallel-testing-workers 1') &&
+        shell.contains('RunnerTests.xcresult'),
+    'iOS XCTest bridge uses Flutter integration_test adapter':
+        iosXcTestBridge.contains('@import integration_test;') &&
+        iosXcTestBridge.contains(
+          'INTEGRATION_TEST_IOS_RUNNER(RunnerIntegrationTests)',
+        ),
+    'iOS XCTest is not marked parallelizable in the shared scheme':
+        iosScheme.contains('parallelizable = "NO"') &&
+        !iosScheme.contains('parallelizable = "YES"'),
+    'iOS XCTest adapter inherits app-hosted CocoaPods search paths':
+        RegExp(r"target 'RunnerTests'[\s\S]{0,100}inherit! :search_paths")
+            .hasMatch(iosPodfile) &&
+        shell.contains('--no-enable-swift-package-manager') &&
+        shell.contains("grep -Fq 'integration_test'") &&
+        shell.contains("grep -Fq 'simple_torrent_ios'"),
+    'iOS XCTest isolates CocoaPods from the generated Swift package':
+        shell.contains('config --machine') &&
+        shell.contains('cleanup_ios_xctest') &&
+        shell.contains('trap cleanup_ios_xctest EXIT') &&
+        shell.contains('Flutter did not regenerate the empty Swift package') &&
+        shell.contains(
+          "The CocoaPods XCTest adapter still has plugin dependencies",
+        ),
+    'iOS XCTest supervises config changes and cleans isolated DerivedData':
+        shell.contains(r'python3 "$script_dir/run_with_timeout.py" 60 \') &&
+        shell.contains('Could not allocate isolated Xcode DerivedData') &&
+        shell.contains('outside the validated temporary root') &&
+        shell.contains(r'rm -rf -- "$xctest_derived_data"'),
+    'Apple Release builds explicitly prove SwiftPM consumption':
+        shell.contains('FlutterGeneratedPluginSwiftPackage/Package.swift') &&
+        shell.contains('spmReleaseVerified') &&
+        shell.contains('Verified SwiftPM Release consumer'),
     'shell drives non-web release validation in supported Profile mode': RegExp(
       r'drive[\s\S]{0,350}--profile',
     ).hasMatch(shell),
@@ -91,7 +146,7 @@ void main() {
         shell.contains('SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES') &&
         shell.contains('SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES') &&
         shell.contains('SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES') &&
-        shell.split(r'python3 "$script_dir/run_with_timeout.py"').length == 4,
+        shell.split(r'python3 "$script_dir/run_with_timeout.py"').length >= 8,
     'shell reports process deadline expiry in structured diagnostics':
         shell.contains('preflightTimeoutMinutes') &&
         shell.contains('processTimeoutMinutes') &&

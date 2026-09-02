@@ -39,7 +39,13 @@ build_timeout_minutes=0
 keep_on_failure=false
 handling_failure=false
 test_execution_mode="debug"
+integration_runner="flutter-cli"
 release_artifact_built=false
+spm_release_verified=false
+xctest_result_path=""
+ios_spm_restore=""
+xctest_derived_data=""
+xctest_temp_root=""
 
 fail() {
   local message="$1"
@@ -49,7 +55,7 @@ fail() {
   trap - ERR
   printf 'ERROR: %s\n' "$message" >> "$log_path"
   local json
-  json="{\"passed\":false,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"preflightTimeoutMinutes\":$preflight_timeout_minutes,\"processTimeoutMinutes\":$process_timeout_minutes,\"buildTimeoutMinutes\":$build_timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"releaseArtifactBuilt\":$release_artifact_built,\"testFile\":\"$(json_escape "$test_file")\",\"exitCode\":$code,\"error\":\"$(json_escape "$message")\",\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+  json="{\"passed\":false,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"preflightTimeoutMinutes\":$preflight_timeout_minutes,\"processTimeoutMinutes\":$process_timeout_minutes,\"buildTimeoutMinutes\":$build_timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"integrationRunner\":\"$(json_escape "$integration_runner")\",\"releaseArtifactBuilt\":$release_artifact_built,\"spmReleaseVerified\":$spm_release_verified,\"testFile\":\"$(json_escape "$test_file")\",\"xctestResult\":\"$(json_escape "$xctest_result_path")\",\"exitCode\":$code,\"error\":\"$(json_escape "$message")\",\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
   printf '%s\n' "$json" > "$result_path"
   printf '%s\n' "$message" >&2
   printf 'SIMPLE_TORRENT_TEST_RESULT=%s\n' "$json"
@@ -80,6 +86,10 @@ esac
 if [[ "$build_mode" == "release" && "$platform" != "ios" ]]; then
   test_execution_mode="profile"
 fi
+if [[ "$platform" == "ios" ]]; then
+  test_execution_mode="xctest-debug"
+  integration_runner="xctest"
+fi
 example_root="$repo_root/packages/simple_torrent/example"
 [[ -f "$example_root/pubspec.yaml" ]] ||
   fail "Example package not found at $example_root" 66
@@ -95,6 +105,22 @@ elif command -v fvm >/dev/null 2>&1; then
 else
   fail "Flutter was not found. Put flutter on PATH or set SIMPLE_TORRENT_FLUTTER." 69
 fi
+
+cleanup_ios_xctest() {
+  set +e
+  if [[ "$ios_spm_restore" == "enable" ]]; then
+    (
+      cd "$example_root"
+      python3 "$script_dir/run_with_timeout.py" 60 \
+        "${flutter_cmd[@]}" config --enable-swift-package-manager
+    ) >> "$log_path" 2>&1 || true
+  fi
+  if [[ -n "$xctest_derived_data" && -n "$xctest_temp_root" &&
+    -d "$xctest_derived_data" &&
+    "$xctest_derived_data" == "$xctest_temp_root"/simple-torrent-ios-xctest.* ]]; then
+    rm -rf -- "$xctest_derived_data"
+  fi
+}
 
 command -v python3 >/dev/null 2>&1 ||
   fail "python3 is required for Flutter process supervision and device validation." 69
@@ -243,7 +269,11 @@ define_arguments=(
   "--dart-define=SIMPLE_TORRENT_KEEP_ON_FAILURE=$keep_on_failure"
   "--dart-define=SIMPLE_TORRENT_EXPECTED_PLATFORM=$platform"
 )
-if [[ "$build_mode" == "release" && "$platform" != "ios" ]]; then
+if [[ "$platform" == "ios" ]]; then
+  # The iOS command is prepared after the real Release build and XCTest
+  # project configuration below.
+  test_command=()
+elif [[ "$build_mode" == "release" ]]; then
   # Non-web Flutter Driver intentionally rejects --release because release
   # builds have no VM service. Build the real release artifact, then drive the
   # same bundled native binary in the closest supported mode.
@@ -296,6 +326,130 @@ if [[ "$build_mode" == "release" ]]; then
     fail "Flutter Release build failed with exit code ${release_pipeline_status[0]}." "${release_pipeline_status[0]}"
   fi
   release_artifact_built=true
+
+  if [[ "$platform" == "ios" || "$platform" == "macos" ]]; then
+    spm_manifest="$example_root/$platform/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift"
+    spm_plugin="simple_torrent_$platform"
+    if [[ ! -f "$spm_manifest" ]] || ! grep -Fq "$spm_plugin" "$spm_manifest"; then
+      fail "The $platform Release build did not consume $spm_plugin through Flutter's generated Swift package." 70
+    fi
+    spm_release_verified=true
+    printf 'Verified SwiftPM Release consumer: %s contains %s.\n' \
+      "$spm_manifest" "$spm_plugin" | tee -a "$log_path"
+  fi
+fi
+
+if [[ "$platform" == "ios" ]]; then
+  command -v xcodebuild >/dev/null 2>&1 ||
+    fail "xcodebuild is required for the iOS XCTest integration runner." 69
+
+  # Flutter's normal simulator runner discovers the VM service by parsing a
+  # live `simctl log stream`. That parser is unreliable with Xcode/iOS 26.
+  # Flutter's supported XCTest adapter reports the same Dart integration tests
+  # without depending on that log-discovery path. The adapter is exposed to the
+  # app-hosted RunnerTests bundle through CocoaPods' `inherit! :search_paths`.
+  # The preceding Release build still proves that the plugin is a valid SwiftPM
+  # consumer; only this app-hosted test adapter uses the CocoaPods fallback.
+  if ! swiftpm_config_json="$(
+    cd "$example_root"
+    python3 "$script_dir/run_with_timeout.py" 60 \
+      "${flutter_cmd[@]}" config --machine 2>> "$log_path"
+  )"; then
+    fail "Could not read Flutter's SwiftPM configuration before the iOS XCTest run." 69
+  fi
+  if ! swiftpm_config_state="$(
+    printf '%s\n' "$swiftpm_config_json" | python3 -c \
+      'import json, sys; print("false" if json.load(sys.stdin).get("enable-swift-package-manager") is False else "true")'
+  )"; then
+    fail "Could not parse Flutter's SwiftPM configuration before the iOS XCTest run." 69
+  fi
+  if [[ "$swiftpm_config_state" == "true" ]]; then
+    ios_spm_restore="enable"
+  fi
+  trap cleanup_ios_xctest EXIT
+
+  printf 'Preparing iOS app-hosted XCTest integration target.\n' | tee -a "$log_path"
+  (
+    cd "$example_root"
+    python3 "$script_dir/run_with_timeout.py" 60 \
+      "${flutter_cmd[@]}" config --no-enable-swift-package-manager
+  ) 2>&1 | tee -a "$log_path"
+  config_toggle_status=("${PIPESTATUS[@]}")
+  if [[ ${config_toggle_status[1]} -ne 0 ]]; then
+    fail "Could not write Flutter dependency-manager diagnostics (tee exit code ${config_toggle_status[1]})." "${config_toggle_status[1]}"
+  fi
+  if [[ ${config_toggle_status[0]} -ne 0 ]]; then
+    fail "Could not select CocoaPods for the iOS XCTest adapter." "${config_toggle_status[0]}"
+  fi
+
+  ios_config_command=(
+    "${flutter_cmd[@]}" build ios
+    --debug
+    --simulator
+    --config-only
+    "${define_arguments[@]}"
+    "$test_file"
+  )
+  (
+    cd "$example_root"
+    python3 "$script_dir/run_with_timeout.py" \
+      "$((build_timeout_minutes * 60))" "${ios_config_command[@]}"
+  ) 2>&1 | tee -a "$log_path"
+  ios_config_status=("${PIPESTATUS[@]}")
+  if [[ ${ios_config_status[1]} -ne 0 ]]; then
+    fail "Could not write iOS XCTest configuration diagnostics (tee exit code ${ios_config_status[1]})." "${ios_config_status[1]}"
+  fi
+  if [[ ${ios_config_status[0]} -ne 0 ]]; then
+    if [[ ${ios_config_status[0]} -eq 124 ]]; then
+      fail "iOS XCTest configuration exceeded its ${build_timeout_minutes}-minute process deadline." 124
+    fi
+    fail "iOS XCTest configuration failed with exit code ${ios_config_status[0]}." "${ios_config_status[0]}"
+  fi
+
+  # Flutter retains the generated Swift package reference after SPM has been
+  # disabled, but deliberately rewrites that package with no plugin products.
+  # Prove that invariant before combining it with the app-hosted CocoaPods test
+  # adapter, otherwise a stale aggregate could duplicate native symbols.
+  ios_generated_spm_manifest="$example_root/ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift"
+  [[ -f "$ios_generated_spm_manifest" ]] ||
+    fail "Flutter did not regenerate the empty Swift package for the CocoaPods XCTest adapter." 70
+  if grep -Fq 'simple_torrent_ios' "$ios_generated_spm_manifest" ||
+    grep -Fq 'integration_test' "$ios_generated_spm_manifest"; then
+    fail "The CocoaPods XCTest adapter still has plugin dependencies in Flutter's generated Swift package." 70
+  fi
+
+  pod_lock="$example_root/ios/Podfile.lock"
+  if [[ ! -f "$pod_lock" ]] ||
+    ! grep -Fq 'integration_test' "$pod_lock" ||
+    ! grep -Fq 'simple_torrent_ios' "$pod_lock"; then
+    fail "The iOS XCTest adapter was not configured with integration_test and simple_torrent_ios CocoaPods." 70
+  fi
+
+  xctest_result_path="$diagnostics_root/RunnerTests.xcresult"
+  xctest_temp_root="${TMPDIR:-/tmp}"
+  xctest_temp_root="${xctest_temp_root%/}"
+  [[ -n "$xctest_temp_root" ]] || xctest_temp_root="/tmp"
+  xctest_derived_data="$(mktemp -d "$xctest_temp_root/simple-torrent-ios-xctest.XXXXXX")" ||
+    fail "Could not allocate isolated Xcode DerivedData for the iOS XCTest run." 73
+  [[ -d "$xctest_derived_data" &&
+    "$xctest_derived_data" == "$xctest_temp_root"/simple-torrent-ios-xctest.* ]] ||
+    fail "The iOS XCTest DerivedData path is outside the validated temporary root." 73
+  test_command=(
+    env NSUnbufferedIO=YES
+    xcodebuild test
+    -workspace ios/Runner.xcworkspace
+    -scheme Runner
+    -configuration Debug
+    -sdk iphonesimulator
+    -destination "platform=iOS Simulator,id=$device_id"
+    -destination-timeout 120
+    -derivedDataPath "$xctest_derived_data"
+    -resultBundlePath "$xctest_result_path"
+    -parallel-testing-enabled NO
+    -maximum-parallel-testing-workers 1
+    CODE_SIGNING_ALLOWED=NO
+    COMPILER_INDEX_STORE_ENABLE=NO
+  )
 fi
 (
   cd "$example_root"
@@ -316,12 +470,12 @@ if [[ $test_exit_code -eq 0 ]]; then
   error_field=""
 elif [[ $test_exit_code -eq 124 ]]; then
   passed=false
-  error_field=",\"error\":\"Flutter integration command exceeded its ${process_timeout_minutes}-minute process deadline.\""
+  error_field=",\"error\":\"Integration command exceeded its ${process_timeout_minutes}-minute process deadline.\""
 else
   passed=false
-  error_field=",\"error\":\"Flutter integration test failed with exit code $test_exit_code.\""
+  error_field=",\"error\":\"Integration test failed with exit code $test_exit_code.\""
 fi
-json="{\"passed\":$passed,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"preflightTimeoutMinutes\":$preflight_timeout_minutes,\"processTimeoutMinutes\":$process_timeout_minutes,\"buildTimeoutMinutes\":$build_timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"releaseArtifactBuilt\":$release_artifact_built,\"testFile\":\"$(json_escape "$test_file")\",\"exitCode\":$test_exit_code,\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"$error_field}"
+json="{\"passed\":$passed,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"preflightTimeoutMinutes\":$preflight_timeout_minutes,\"processTimeoutMinutes\":$process_timeout_minutes,\"buildTimeoutMinutes\":$build_timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"integrationRunner\":\"$(json_escape "$integration_runner")\",\"releaseArtifactBuilt\":$release_artifact_built,\"spmReleaseVerified\":$spm_release_verified,\"testFile\":\"$(json_escape "$test_file")\",\"xctestResult\":\"$(json_escape "$xctest_result_path")\",\"exitCode\":$test_exit_code,\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"$error_field}"
 printf '%s\n' "$json" > "$result_path"
 printf 'SIMPLE_TORRENT_TEST_RESULT=%s\n' "$json"
 exit "$test_exit_code"

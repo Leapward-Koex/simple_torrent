@@ -398,15 +398,17 @@ void main() {
           r'Boot a fresh dedicated iOS ARM simulator[\s\S]{0,150}timeout-minutes: 10',
         ).hasMatch(gate) &&
         RegExp(
-          r'Build iOS Release and run Simulator Debug init smoke[\s\S]{0,150}timeout-minutes: 35',
+          r'Build iOS Release and run Simulator Debug XCTest init smoke[\s\S]{0,150}timeout-minutes: 50',
         ).hasMatch(gate) &&
         RegExp(
-          r'Run iOS Simulator deterministic suspension smoke[\s\S]{0,150}timeout-minutes: 20',
+          r'Run iOS Simulator XCTest deterministic suspension smoke[\s\S]{0,150}timeout-minutes: 35',
         ).hasMatch(gate) &&
         gate.contains('SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES=3') &&
         gate.contains('SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15') &&
         gate.contains('SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10') &&
         gate.contains('SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES=5') &&
+        _occurrences(gate, 'SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15') >= 2 &&
+        _occurrences(gate, 'SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10') >= 2 &&
         gate.contains('Capture iOS Simulator failure diagnostics') &&
         gate.contains(
           "if: (failure() || cancelled()) && matrix.platform == 'ios'",
