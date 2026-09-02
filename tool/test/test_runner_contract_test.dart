@@ -4,6 +4,7 @@ import 'dart:io';
 void main() {
   final powershell = File('tool/test-sample.ps1').readAsStringSync();
   final shell = File('tool/test-sample.sh').readAsStringSync();
+  final timeoutSupervisor = File('tool/run_with_timeout.py').readAsStringSync();
   final powershellSuspension = File('tool/test-suspension.ps1')
       .readAsStringSync();
   final shellSuspension = File('tool/test-suspension.sh').readAsStringSync();
@@ -86,6 +87,30 @@ void main() {
     'shell writes diagnostics for preflight failures':
         shell.contains('unexpected_failure') &&
         shell.contains(r'\"passed\":false'),
+    'shell gives discovery, Release builds, and integration runs hard deadlines':
+        shell.contains('SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES') &&
+        shell.contains('SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES') &&
+        shell.contains('SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES') &&
+        shell.split(r'python3 "$script_dir/run_with_timeout.py"').length == 4,
+    'shell reports process deadline expiry in structured diagnostics':
+        shell.contains('preflightTimeoutMinutes') &&
+        shell.contains('processTimeoutMinutes') &&
+        shell.contains('buildTimeoutMinutes') &&
+        shell.contains('process deadline') &&
+        shell.contains('124'),
+    'Unix timeout supervisor isolates and terminates the full process group':
+        timeoutSupervisor.contains('start_new_session=True') &&
+        timeoutSupervisor.contains('os.killpg') &&
+        timeoutSupervisor.contains('_process_group_exists') &&
+        timeoutSupervisor.contains('signal.SIGTERM') &&
+        timeoutSupervisor.contains('signal.SIGKILL') &&
+        timeoutSupervisor.contains('subprocess.TimeoutExpired') &&
+        timeoutSupervisor.contains('Command exited with descendants') &&
+        timeoutSupervisor.contains('_TIMEOUT_EXIT_CODE = 124'),
+    'Unix timeout supervisor forwards workflow cancellation signals':
+        timeoutSupervisor.contains('forward_signal') &&
+        timeoutSupervisor.contains('signal.SIGINT') &&
+        timeoutSupervisor.contains('signal.SIGHUP'),
     'PowerShell suspension wrapper selects the deterministic test':
         powershellSuspension.contains(
           'integration_test/transfer_suspension_test.dart',
