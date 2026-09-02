@@ -33,6 +33,10 @@ jobs:
           lfs: false
           persist-credentials: false
 
+      - name: Validate Unix process supervisor
+        shell: bash
+        run: python3 tool/test/run_with_timeout_test.py
+
       - name: Classify changed paths
         id: changes
         shell: bash
@@ -405,9 +409,10 @@ jobs:
         shell: bash
         run: ./tool/native.sh verify ios
 
-      - name: Boot an explicit iOS ARM simulator
+      - name: Boot a fresh dedicated iOS ARM simulator
         if: matrix.platform == 'ios'
         shell: bash
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
@@ -422,38 +427,78 @@ jobs:
             echo "No available iOS $simulator_sdk Simulator runtime for the pinned Xcode." >&2
             exit 69
           }
-          udid="$(xcrun simctl list devices available --json | jq -r --arg runtime "$runtime" \
-            '(.devices[$runtime] // []) | map(select(.isAvailable == true)) | (first // {}) | .udid // empty')"
-          created=false
-          if [[ -z "$udid" ]]; then
-            device_type="$(xcrun simctl list devicetypes --json | jq -r \
-              '[.devicetypes[] | select(.name | startswith("iPhone"))] | (last // {}) | .identifier // empty')"
-            [[ -n "$device_type" ]] || { echo 'No iPhone Simulator device type.' >&2; exit 69; }
-            udid="$(xcrun simctl create SimpleTorrent-CI "$device_type" "$runtime")"
-            created=true
-          fi
-          xcrun simctl boot "$udid" 2>/dev/null || true
-          xcrun simctl bootstatus "$udid" -b
+          # Copy only the device type from an image-provided device for this
+          # exact runtime. Reusing that device's UDID proved vulnerable to
+          # stale boot/log-reader state, while choosing an arbitrary type is
+          # not guaranteed to be compatible with older pinned runtimes.
+          device_type="$(xcrun simctl list devices available --json | jq -r --arg runtime "$runtime" \
+            '(.devices[$runtime] // []) | map(select(.isAvailable == true and (.name | startswith("iPhone")))) | (first // {}) | .deviceTypeIdentifier // empty')"
+          [[ -n "$device_type" ]] || {
+            echo "No compatible iPhone Simulator device type for $runtime." >&2
+            exit 69
+          }
+          simulator_name="SimpleTorrent-CI-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          udid="$(xcrun simctl create "$simulator_name" "$device_type" "$runtime")"
+          [[ -n "$udid" ]] || { echo 'Could not create the dedicated iOS Simulator.' >&2; exit 69; }
+          # Persist the identifier before booting so the always() cleanup can
+          # delete even a device whose boot or readiness check fails.
           printf 'SIMPLE_TORRENT_DEVICE_ID=%s\n' "$udid" >> "$GITHUB_ENV"
-          printf 'SIMPLE_TORRENT_SIMULATOR_CREATED=%s\n' "$created" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
 
-      - name: Build iOS Release and run Simulator Debug smoke tests
+      - name: Build iOS Release and run Simulator Debug init smoke
         if: matrix.platform == 'ios'
         shell: bash
+        timeout-minutes: 35
         run: |
           set -euo pipefail
-          SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh ios release
+          SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES=3 SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15 SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10 SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES=5 SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh ios release
+
+      - name: Run iOS Simulator deterministic suspension smoke
+        if: matrix.platform == 'ios'
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
           ./tool/test-suspension.sh ios debug
+
+      - name: Capture iOS Simulator failure diagnostics
+        if: (failure() || cancelled()) && matrix.platform == 'ios'
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set +e
+          diagnostics_root=build/native-smoke/ios-simulator
+          mkdir -p "$diagnostics_root"
+          if [[ -n "${SIMPLE_TORRENT_DEVICE_ID:-}" ]]; then
+            python3 tool/run_with_timeout.py 60 \
+              xcrun simctl spawn "$SIMPLE_TORRENT_DEVICE_ID" log show \
+              --last 30m --style compact --predicate 'process == "Runner"' \
+              > "$diagnostics_root/runner.log" 2>&1
+            python3 tool/run_with_timeout.py 60 \
+              xcrun simctl io "$SIMPLE_TORRENT_DEVICE_ID" screenshot \
+              "$diagnostics_root/screenshot.png" \
+              > "$diagnostics_root/screenshot.log" 2>&1
+            python3 tool/run_with_timeout.py 60 \
+              xcrun simctl listapps "$SIMPLE_TORRENT_DEVICE_ID" \
+              > "$diagnostics_root/apps.txt" 2>&1
+          fi
+          python3 tool/run_with_timeout.py 60 xcrun simctl list devices --json \
+            > "$diagnostics_root/devices.json" 2>&1
+          exit 0
 
       - name: Shut down iOS Simulator
         if: always() && matrix.platform == 'ios'
         shell: bash
+        timeout-minutes: 5
         run: |
           if [[ -n "${SIMPLE_TORRENT_DEVICE_ID:-}" ]]; then
-            xcrun simctl shutdown "$SIMPLE_TORRENT_DEVICE_ID" 2>/dev/null || true
-            if [[ "${SIMPLE_TORRENT_SIMULATOR_CREATED:-false}" == true ]]; then
-              xcrun simctl delete "$SIMPLE_TORRENT_DEVICE_ID" 2>/dev/null || true
-            fi
+            python3 tool/run_with_timeout.py 60 \
+              xcrun simctl shutdown "$SIMPLE_TORRENT_DEVICE_ID" \
+              2>/dev/null || true
+            python3 tool/run_with_timeout.py 60 \
+              xcrun simctl delete "$SIMPLE_TORRENT_DEVICE_ID" \
+              2>/dev/null || true
           fi
 
       - name: Upload smoke diagnostics

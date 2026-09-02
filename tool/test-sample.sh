@@ -32,7 +32,10 @@ platform="$requested_platform"
 device_id="${SIMPLE_TORRENT_DEVICE_ID:-}"
 device_target=""
 device_emulator=false
-timeout_minutes=""
+timeout_minutes=0
+preflight_timeout_minutes=0
+process_timeout_minutes=0
+build_timeout_minutes=0
 keep_on_failure=false
 handling_failure=false
 test_execution_mode="debug"
@@ -46,7 +49,7 @@ fail() {
   trap - ERR
   printf 'ERROR: %s\n' "$message" >> "$log_path"
   local json
-  json="{\"passed\":false,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"releaseArtifactBuilt\":$release_artifact_built,\"testFile\":\"$(json_escape "$test_file")\",\"exitCode\":$code,\"error\":\"$(json_escape "$message")\",\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+  json="{\"passed\":false,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"preflightTimeoutMinutes\":$preflight_timeout_minutes,\"processTimeoutMinutes\":$process_timeout_minutes,\"buildTimeoutMinutes\":$build_timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"releaseArtifactBuilt\":$release_artifact_built,\"testFile\":\"$(json_escape "$test_file")\",\"exitCode\":$code,\"error\":\"$(json_escape "$message")\",\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
   printf '%s\n' "$json" > "$result_path"
   printf '%s\n' "$message" >&2
   printf 'SIMPLE_TORRENT_TEST_RESULT=%s\n' "$json"
@@ -93,9 +96,30 @@ else
   fail "Flutter was not found. Put flutter on PATH or set SIMPLE_TORRENT_FLUTTER." 69
 fi
 
+command -v python3 >/dev/null 2>&1 ||
+  fail "python3 is required for Flutter process supervision and device validation." 69
+preflight_timeout_input="${SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES:-3}"
+[[ "$preflight_timeout_input" =~ ^[0-9]+$ && ${#preflight_timeout_input} -le 2 ]] ||
+  fail "SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES must be an integer from 1 to 30." 64
+preflight_timeout_minutes=$((10#$preflight_timeout_input))
+((preflight_timeout_minutes >= 1 && preflight_timeout_minutes <= 30)) ||
+  fail "SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES must be an integer from 1 to 30." 64
+
 device_stderr_path="$diagnostics_root/flutter-devices.stderr.log"
-if ! device_output="$("${flutter_cmd[@]}" devices --machine 2>"$device_stderr_path")"; then
+if device_output="$(
+  python3 "$script_dir/run_with_timeout.py" \
+    "$((preflight_timeout_minutes * 60))" \
+    "${flutter_cmd[@]}" devices --machine 2>"$device_stderr_path"
+)"; then
+  device_exit_code=0
+else
+  device_exit_code=$?
+fi
+if [[ $device_exit_code -ne 0 ]]; then
   printf '%s\n' "$(<"$device_stderr_path")" >> "$log_path"
+  if [[ $device_exit_code -eq 124 ]]; then
+    fail "flutter devices exceeded its ${preflight_timeout_minutes}-minute process deadline." 124
+  fi
   fail "flutter devices failed." 69
 fi
 printf 'Flutter devices:\n%s\n' "$device_output" >> "$log_path"
@@ -105,8 +129,6 @@ fi
 devices_path="$diagnostics_root/flutter-devices.json"
 printf '%s\n' "$device_output" > "$devices_path"
 
-command -v python3 >/dev/null 2>&1 ||
-  fail "python3 is required to validate Flutter's machine-readable device list." 69
 if ! device_record="$(python3 - "$devices_path" "$platform" "$device_id" 2>>"$log_path" <<'PY'
 import json
 import sys
@@ -197,6 +219,18 @@ timeout_input="${SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES:-45}"
 timeout_minutes=$((10#$timeout_input))
 ((timeout_minutes >= 1 && timeout_minutes <= 240)) ||
   fail "SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES must be an integer from 1 to 240." 64
+process_timeout_input="${SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES:-$((timeout_minutes + 10))}"
+[[ "$process_timeout_input" =~ ^[0-9]+$ && ${#process_timeout_input} -le 3 ]] ||
+  fail "SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES must be an integer from 1 to 360." 64
+process_timeout_minutes=$((10#$process_timeout_input))
+((process_timeout_minutes >= 1 && process_timeout_minutes <= 360)) ||
+  fail "SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES must be an integer from 1 to 360." 64
+build_timeout_input="${SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES:-30}"
+[[ "$build_timeout_input" =~ ^[0-9]+$ && ${#build_timeout_input} -le 3 ]] ||
+  fail "SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES must be an integer from 1 to 360." 64
+build_timeout_minutes=$((10#$build_timeout_input))
+((build_timeout_minutes >= 1 && build_timeout_minutes <= 360)) ||
+  fail "SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES must be an integer from 1 to 360." 64
 case "${SIMPLE_TORRENT_KEEP_ON_FAILURE:-false}" in
   1|true|TRUE|yes|YES) keep_on_failure=true ;;
   *) keep_on_failure=false ;;
@@ -248,20 +282,25 @@ if [[ "$build_mode" == "release" ]]; then
     tee -a "$log_path"
   (
     cd "$example_root"
-    "${release_build_command[@]}"
+    python3 "$script_dir/run_with_timeout.py" \
+      "$((build_timeout_minutes * 60))" "${release_build_command[@]}"
   ) 2>&1 | tee -a "$log_path"
   release_pipeline_status=("${PIPESTATUS[@]}")
   if [[ ${release_pipeline_status[1]} -ne 0 ]]; then
     fail "Could not write Flutter Release-build diagnostics (tee exit code ${release_pipeline_status[1]})." "${release_pipeline_status[1]}"
   fi
   if [[ ${release_pipeline_status[0]} -ne 0 ]]; then
+    if [[ ${release_pipeline_status[0]} -eq 124 ]]; then
+      fail "Flutter Release build exceeded its ${build_timeout_minutes}-minute process deadline." 124
+    fi
     fail "Flutter Release build failed with exit code ${release_pipeline_status[0]}." "${release_pipeline_status[0]}"
   fi
   release_artifact_built=true
 fi
 (
   cd "$example_root"
-  "${test_command[@]}"
+  python3 "$script_dir/run_with_timeout.py" \
+    "$((process_timeout_minutes * 60))" "${test_command[@]}"
 ) 2>&1 | tee -a "$log_path"
 pipeline_status=("${PIPESTATUS[@]}")
 set -e
@@ -275,11 +314,14 @@ fi
 if [[ $test_exit_code -eq 0 ]]; then
   passed=true
   error_field=""
+elif [[ $test_exit_code -eq 124 ]]; then
+  passed=false
+  error_field=",\"error\":\"Flutter integration command exceeded its ${process_timeout_minutes}-minute process deadline.\""
 else
   passed=false
   error_field=",\"error\":\"Flutter integration test failed with exit code $test_exit_code.\""
 fi
-json="{\"passed\":$passed,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"releaseArtifactBuilt\":$release_artifact_built,\"testFile\":\"$(json_escape "$test_file")\",\"exitCode\":$test_exit_code,\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"$error_field}"
+json="{\"passed\":$passed,\"platform\":\"$(json_escape "$platform")\",\"device\":\"$(json_escape "$device_id")\",\"targetPlatform\":\"$(json_escape "$device_target")\",\"emulator\":$device_emulator,\"timeoutMinutes\":$timeout_minutes,\"preflightTimeoutMinutes\":$preflight_timeout_minutes,\"processTimeoutMinutes\":$process_timeout_minutes,\"buildTimeoutMinutes\":$build_timeout_minutes,\"keepOnFailure\":$keep_on_failure,\"buildMode\":\"$(json_escape "$build_mode")\",\"testExecutionMode\":\"$(json_escape "$test_execution_mode")\",\"releaseArtifactBuilt\":$release_artifact_built,\"testFile\":\"$(json_escape "$test_file")\",\"exitCode\":$test_exit_code,\"log\":\"$(json_escape "$log_path")\",\"result\":\"$(json_escape "$result_path")\",\"completedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"$error_field}"
 printf '%s\n' "$json" > "$result_path"
 printf 'SIMPLE_TORRENT_TEST_RESULT=%s\n' "$json"
 exit "$test_exit_code"
