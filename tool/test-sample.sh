@@ -43,6 +43,7 @@ integration_runner="flutter-cli"
 release_artifact_built=false
 spm_release_verified=false
 xctest_result_path=""
+ios_spm_restore=""
 xctest_derived_data=""
 xctest_temp_root=""
 
@@ -107,6 +108,13 @@ fi
 
 cleanup_ios_xctest() {
   set +e
+  if [[ "$ios_spm_restore" == "enable" ]]; then
+    (
+      cd "$example_root"
+      python3 "$script_dir/run_with_timeout.py" 60 \
+        "${flutter_cmd[@]}" config --enable-swift-package-manager
+    ) >> "$log_path" 2>&1 || true
+  fi
   if [[ -n "$xctest_derived_data" && -n "$xctest_temp_root" &&
     -d "$xctest_derived_data" &&
     "$xctest_derived_data" == "$xctest_temp_root"/simple-torrent-ios-xctest.* ]]; then
@@ -338,12 +346,41 @@ if [[ "$platform" == "ios" ]]; then
   # Flutter's normal simulator runner discovers the VM service by parsing a
   # live `simctl log stream`. That parser is unreliable with Xcode/iOS 26.
   # Flutter's supported XCTest adapter reports the same Dart integration tests
-  # without depending on that log-discovery path. Both the app and its hosted
-  # RunnerTests bundle link FlutterGeneratedPluginSwiftPackage, so the adapter
-  # and the plugin remain on the same SwiftPM dependency graph.
+  # without depending on that log-discovery path. The adapter is exposed to the
+  # app-hosted RunnerTests bundle through CocoaPods' `inherit! :search_paths`.
+  # The preceding Release build still proves that the plugin is a valid SwiftPM
+  # consumer; only this app-hosted test adapter uses the CocoaPods fallback.
+  if ! swiftpm_config_json="$(
+    cd "$example_root"
+    python3 "$script_dir/run_with_timeout.py" 60 \
+      "${flutter_cmd[@]}" config --machine 2>> "$log_path"
+  )"; then
+    fail "Could not read Flutter's SwiftPM configuration before the iOS XCTest run." 69
+  fi
+  if ! swiftpm_config_state="$(
+    printf '%s\n' "$swiftpm_config_json" | python3 -c \
+      'import json, sys; print("false" if json.load(sys.stdin).get("enable-swift-package-manager") is False else "true")'
+  )"; then
+    fail "Could not parse Flutter's SwiftPM configuration before the iOS XCTest run." 69
+  fi
+  if [[ "$swiftpm_config_state" == "true" ]]; then
+    ios_spm_restore="enable"
+  fi
   trap cleanup_ios_xctest EXIT
 
-  printf 'Preparing SwiftPM iOS app-hosted XCTest integration target.\n' | tee -a "$log_path"
+  printf 'Preparing iOS app-hosted XCTest integration target.\n' | tee -a "$log_path"
+  (
+    cd "$example_root"
+    python3 "$script_dir/run_with_timeout.py" 60 \
+      "${flutter_cmd[@]}" config --no-enable-swift-package-manager
+  ) 2>&1 | tee -a "$log_path"
+  config_toggle_status=("${PIPESTATUS[@]}")
+  if [[ ${config_toggle_status[1]} -ne 0 ]]; then
+    fail "Could not write Flutter dependency-manager diagnostics (tee exit code ${config_toggle_status[1]})." "${config_toggle_status[1]}"
+  fi
+  if [[ ${config_toggle_status[0]} -ne 0 ]]; then
+    fail "Could not select CocoaPods for the iOS XCTest adapter." "${config_toggle_status[0]}"
+  fi
 
   ios_config_command=(
     "${flutter_cmd[@]}" build ios
@@ -369,15 +406,23 @@ if [[ "$platform" == "ios" ]]; then
     fail "iOS XCTest configuration failed with exit code ${ios_config_status[0]}." "${ios_config_status[0]}"
   fi
 
-  # The selected integration target must put both the test adapter and the
-  # native plugin in Flutter's generated aggregate. RunnerTests links that
-  # aggregate directly in the Xcode project.
+  # Flutter retains the generated Swift package reference after SPM has been
+  # disabled, but deliberately rewrites that package with no plugin products.
+  # Prove that invariant before combining it with the app-hosted CocoaPods test
+  # adapter, otherwise a stale aggregate could duplicate native symbols.
   ios_generated_spm_manifest="$example_root/ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift"
   [[ -f "$ios_generated_spm_manifest" ]] ||
-    fail "Flutter did not generate the Swift package for the iOS XCTest adapter." 70
-  if ! grep -Fq 'simple_torrent_ios' "$ios_generated_spm_manifest" ||
-    ! grep -Fq 'integration_test' "$ios_generated_spm_manifest"; then
-    fail "The iOS XCTest Swift package is missing integration_test or simple_torrent_ios." 70
+    fail "Flutter did not regenerate the empty Swift package for the CocoaPods XCTest adapter." 70
+  if grep -Fq 'simple_torrent_ios' "$ios_generated_spm_manifest" ||
+    grep -Fq 'integration_test' "$ios_generated_spm_manifest"; then
+    fail "The CocoaPods XCTest adapter still has plugin dependencies in Flutter's generated Swift package." 70
+  fi
+
+  pod_lock="$example_root/ios/Podfile.lock"
+  if [[ ! -f "$pod_lock" ]] ||
+    ! grep -Fq 'integration_test' "$pod_lock" ||
+    ! grep -Fq 'simple_torrent_ios' "$pod_lock"; then
+    fail "The iOS XCTest adapter was not configured with integration_test and simple_torrent_ios CocoaPods." 70
   fi
 
   xctest_result_path="$diagnostics_root/RunnerTests.xcresult"
