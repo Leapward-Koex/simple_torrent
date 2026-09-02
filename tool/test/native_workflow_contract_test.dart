@@ -338,6 +338,9 @@ void main() {
         gate.contains(
           r'[[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" && "$HEAD_REF" == bot/native-bundle ]]',
         ),
+    'gate behaviorally tests the Unix process supervisor': gate.contains(
+      'run: python3 tool/test/run_with_timeout_test.py',
+    ),
     'gate checks out LFS content read-only':
         gate.contains('permissions:\n  contents: read') &&
         !gate.contains('contents: write') &&
@@ -371,15 +374,56 @@ void main() {
         _occurrences(gate, 'flutter config --enable-swift-package-manager') ==
             1 &&
         _occurrences(gate, 'flutter config --enable-macos-arm64-only') == 1,
-    'iOS smoke selects and boots an explicit simulator':
+    'iOS smoke creates, boots, and deletes a fresh dedicated simulator':
         gate.contains('xcrun --sdk iphonesimulator --show-sdk-version') &&
         gate.contains(r'.version == $version or') &&
         gate.contains(r'startswith($version + ".")') &&
         gate.contains('xcrun simctl list runtimes --json') &&
+        gate.contains(
+          r'simulator_name="SimpleTorrent-CI-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+        ) &&
+        gate.contains(
+          r'xcrun simctl create "$simulator_name" "$device_type" "$runtime"',
+        ) &&
+        gate.contains('xcrun simctl list devices available --json') &&
+        gate.contains('.deviceTypeIdentifier // empty') &&
+        !gate.contains('.udid // empty') &&
         gate.contains(r'xcrun simctl bootstatus "$udid" -b') &&
+        gate.contains(r'xcrun simctl delete "$SIMPLE_TORRENT_DEVICE_ID"') &&
         gate.contains('SIMPLE_TORRENT_DEVICE_ID') &&
         gate.contains('./tool/test-sample.sh ios release') &&
         gate.contains('./tool/test-suspension.sh ios debug'),
+    'iOS launch phases have independent outer deadlines and diagnostics':
+        RegExp(
+          r'Boot a fresh dedicated iOS ARM simulator[\s\S]{0,150}timeout-minutes: 10',
+        ).hasMatch(gate) &&
+        RegExp(
+          r'Build iOS Release and run Simulator Debug init smoke[\s\S]{0,150}timeout-minutes: 35',
+        ).hasMatch(gate) &&
+        RegExp(
+          r'Run iOS Simulator deterministic suspension smoke[\s\S]{0,150}timeout-minutes: 20',
+        ).hasMatch(gate) &&
+        gate.contains('SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES=3') &&
+        gate.contains('SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15') &&
+        gate.contains('SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10') &&
+        gate.contains('SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES=5') &&
+        gate.contains('Capture iOS Simulator failure diagnostics') &&
+        gate.contains(
+          "if: (failure() || cancelled()) && matrix.platform == 'ios'",
+        ) &&
+        _occurrences(gate, 'python3 tool/run_with_timeout.py 60') >= 4 &&
+        gate.contains('xcrun simctl spawn') &&
+        gate.contains(r'''--predicate 'process == "Runner"' ''') &&
+        gate.indexOf('Capture iOS Simulator failure diagnostics') <
+            gate.indexOf('Shut down iOS Simulator') &&
+        gate.indexOf('Shut down iOS Simulator') <
+            gate.indexOf('Upload smoke diagnostics') &&
+        gate.indexOf(r'''printf 'SIMPLE_TORRENT_DEVICE_ID=%s\n' "$udid"''') <
+            gate.indexOf(r'xcrun simctl boot "$udid"') &&
+        RegExp(r'Shut down iOS Simulator[\s\S]{0,100}if: always\(\)')
+            .hasMatch(gate) &&
+        RegExp(r'Upload smoke diagnostics[\s\S]{0,100}if: always\(\)')
+            .hasMatch(gate),
     'Android smoke requires KVM hardware acceleration':
         gate.contains('- name: Enable Android emulator KVM access') &&
         gate.contains(

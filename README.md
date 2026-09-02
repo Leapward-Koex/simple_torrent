@@ -203,6 +203,7 @@ dart run tool/test/lifecycle_serialization_test.dart
 dart run tool/test/session_suspension_contract_test.dart
 dart run tool/test/test_runner_contract_test.dart
 dart run tool/test/native_workflow_contract_test.dart
+python3 tool/test/run_with_timeout_test.py
 ```
 
 Repeat analysis/tests in `simple_torrent_platform_interface` and the example;
