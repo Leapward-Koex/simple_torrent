@@ -35,6 +35,10 @@ const _resumedStates = {
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  // Native automation can enable platform accessibility after flutter_test
+  // records its semantics-handle baseline. Pin the test dispatcher so that
+  // this framework-owned handle is not reported as a leak from the test.
+  binding.platformDispatcher.semanticsEnabledTestValue = false;
 
   testWidgets(
     'downloads and verifies the complete WIRED torrent through keyed UI actions',
@@ -305,6 +309,8 @@ void main() {
         });
       }
     },
+    // Key-based widget interactions do not require the semantics tree.
+    semanticsEnabled: false,
     timeout: Timeout(Duration(minutes: _timeoutMinutes + 5)),
   );
 }

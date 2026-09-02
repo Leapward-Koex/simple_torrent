@@ -27,6 +27,10 @@ const _expectedPlatform = String.fromEnvironment(
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  // Native automation can enable platform accessibility after flutter_test
+  // records its semantics-handle baseline. Pin the test dispatcher so that
+  // this framework-owned handle is not reported as a leak from the test.
+  binding.platformDispatcher.semanticsEnabledTestValue = false;
 
   testWidgets(
     'globally suspends transfers while preserving per-torrent pause state',
@@ -390,6 +394,8 @@ void main() {
         }
       }
     },
+    // The test pumps the native event loop but never reads Flutter semantics.
+    semanticsEnabled: false,
     timeout: Timeout(Duration(minutes: _timeoutMinutes + 2)),
   );
 }

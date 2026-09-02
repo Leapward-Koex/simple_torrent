@@ -446,21 +446,21 @@ jobs:
           xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid" -b
 
-      - name: Build iOS Release and run Simulator Debug init smoke
+      - name: Build iOS Release and run Simulator Debug XCTest init smoke
+        if: matrix.platform == 'ios'
+        shell: bash
+        timeout-minutes: 50
+        run: |
+          set -euo pipefail
+          SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES=3 SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15 SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10 SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES=5 SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh ios release
+
+      - name: Run iOS Simulator XCTest deterministic suspension smoke
         if: matrix.platform == 'ios'
         shell: bash
         timeout-minutes: 35
         run: |
           set -euo pipefail
-          SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES=3 SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15 SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10 SIMPLE_TORRENT_TEST_TIMEOUT_MINUTES=5 SIMPLE_TORRENT_TEST_FILE=integration_test/plugin_integration_test.dart SIMPLE_TORRENT_DIAGNOSTICS_SUITE=native-init-smoke ./tool/test-sample.sh ios release
-
-      - name: Run iOS Simulator deterministic suspension smoke
-        if: matrix.platform == 'ios'
-        shell: bash
-        timeout-minutes: 20
-        run: |
-          set -euo pipefail
-          ./tool/test-suspension.sh ios debug
+          SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES=3 SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES=15 SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES=10 ./tool/test-suspension.sh ios debug
 
       - name: Capture iOS Simulator failure diagnostics
         if: (failure() || cancelled()) && matrix.platform == 'ios'
