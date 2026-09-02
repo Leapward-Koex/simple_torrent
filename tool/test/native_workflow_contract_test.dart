@@ -364,12 +364,13 @@ void main() {
         gate.contains(r'[[ "$(uname -m)" == "arm64" ]]') &&
         !gate.contains('sim-x86_64') &&
         !gate.contains('macos-15-intel'),
-    'Apple smoke jobs explicitly exercise SwiftPM':
+    'Apple smoke jobs explicitly exercise SwiftPM and ARM-only macOS builds':
         gate.contains(
           "if: matrix.platform == 'macos' || matrix.platform == 'ios'",
         ) &&
         _occurrences(gate, 'flutter config --enable-swift-package-manager') ==
-            1,
+            1 &&
+        _occurrences(gate, 'flutter config --enable-macos-arm64-only') == 1,
     'iOS smoke selects and boots an explicit simulator':
         gate.contains('xcrun --sdk iphonesimulator --show-sdk-version') &&
         gate.contains(r'.version == $version or') &&
