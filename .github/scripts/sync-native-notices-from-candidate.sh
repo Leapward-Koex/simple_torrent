@@ -12,7 +12,7 @@ candidate_root="$(cd -- "$1" && pwd)"
 start_marker='<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->'
 end_marker='<!-- END GENERATED NATIVE DEPENDENCIES -->'
 temporary_root="$(mktemp -d)"
-trap 'rm -rf -- "$temporary_root"' EXIT
+trap 'rm -rf "$temporary_root"' EXIT
 
 marker_count() {
   local marker="$1"
@@ -63,6 +63,9 @@ for relative in \
     !skipping { print }
     END { if (!replaced) exit 65 }
   ' "$destination" > "$output"
-  chmod --reference="$destination" "$output"
-  mv -- "$output" "$destination"
+  # Notice files are committed as ordinary non-executable Markdown. A fixed
+  # mode is portable across GNU and BSD userlands; macOS chmod does not support
+  # GNU's --reference option.
+  chmod 0644 "$output"
+  mv "$output" "$destination"
 done

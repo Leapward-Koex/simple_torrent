@@ -8,6 +8,8 @@ void main() {
   const generationPath = '.github/workflows/native-bundle-generate.yml';
   const gatePath = '.github/workflows/native-bundle-gate.yml';
   const overlayPath = '.github/scripts/overlay-native-artifacts.sh';
+  const noticeSyncPath =
+      '.github/scripts/sync-native-notices-from-candidate.sh';
   const attributesPath = '.gitattributes';
   final build = File(buildPath).readAsStringSync().replaceAll('\r\n', '\n');
   final generation = File(generationPath)
@@ -15,6 +17,9 @@ void main() {
       .replaceAll('\r\n', '\n');
   final gate = File(gatePath).readAsStringSync().replaceAll('\r\n', '\n');
   final overlay = File(overlayPath).readAsStringSync().replaceAll('\r\n', '\n');
+  final noticeSync = File(noticeSyncPath)
+      .readAsStringSync()
+      .replaceAll('\r\n', '\n');
   final attributes = File(attributesPath)
       .readAsStringSync()
       .replaceAll('\r\n', '\n');
@@ -454,6 +459,11 @@ void main() {
         gate.contains(
           r'git ls-tree -r -z --name-only HEAD -- "$prefix" > "$tree_paths"',
         ),
+    'notice synchronization is portable to macOS BSD userland':
+        noticeSync.contains(r'chmod 0644 "$output"') &&
+        !noticeSync.contains('chmod --reference') &&
+        !noticeSync.contains('mv --') &&
+        !noticeSync.contains('rm -rf --'),
     'source pull requests build and overlay an exact-SHA candidate':
         gate.contains('  build-candidate:\n') &&
         gate.contains("    if: needs.classify.outputs.source == 'true'") &&
