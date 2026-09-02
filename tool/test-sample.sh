@@ -449,6 +449,8 @@ if [[ "$platform" == "ios" ]]; then
     -maximum-parallel-testing-workers 1
     CODE_SIGNING_ALLOWED=NO
     COMPILER_INDEX_STORE_ENABLE=NO
+    ARCHS=arm64
+    ONLY_ACTIVE_ARCH=YES
   )
 fi
 (

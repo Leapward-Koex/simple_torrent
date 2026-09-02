@@ -102,6 +102,8 @@ void main() {
         shell.contains('-parallel-testing-enabled NO') &&
         shell.contains('-maximum-parallel-testing-workers 1') &&
         shell.contains('RunnerTests.xcresult'),
+    'iOS XCTest builds only the hosted ARM simulator slice':
+        shell.contains('ARCHS=arm64') && shell.contains('ONLY_ACTIVE_ARCH=YES'),
     'iOS XCTest bridge uses Flutter integration_test adapter':
         iosXcTestBridge.contains('@import integration_test;') &&
         iosXcTestBridge.contains(
