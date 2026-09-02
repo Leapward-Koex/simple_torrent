@@ -581,8 +581,23 @@ void main() {
         ) &&
         gate.contains('sudo udevadm control --reload-rules') &&
         gate.contains('sudo udevadm trigger --name-match=kvm') &&
+        gate.contains('sudo udevadm settle') &&
+        gate.contains(r'[[ -c /dev/kvm ]]') &&
+        gate.contains('sudo chmod 0666 /dev/kvm') &&
         gate.contains(r'[[ -r /dev/kvm && -w /dev/kvm ]]') &&
         gate.contains(r'"$ANDROID_SDK_ROOT/emulator/emulator" -accel-check') &&
+        gate.indexOf('sudo udevadm trigger --name-match=kvm') <
+            gate.indexOf('sudo udevadm settle') &&
+        gate.indexOf('sudo udevadm settle') <
+            gate.indexOf(r'[[ -c /dev/kvm ]]') &&
+        gate.indexOf(r'[[ -c /dev/kvm ]]') <
+            gate.indexOf('sudo chmod 0666 /dev/kvm') &&
+        gate.indexOf('sudo chmod 0666 /dev/kvm') <
+            gate.indexOf(r'[[ -r /dev/kvm && -w /dev/kvm ]]') &&
+        gate.indexOf(r'[[ -r /dev/kvm && -w /dev/kvm ]]') <
+            gate.indexOf(
+              r'"$ANDROID_SDK_ROOT/emulator/emulator" -accel-check',
+            ) &&
         gate.contains('disable-linux-hw-accel: false') &&
         gate.contains('emulator-options: -no-window -accel on ') &&
         !gate.contains('disable-linux-hw-accel: auto'),

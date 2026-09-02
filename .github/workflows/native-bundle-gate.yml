@@ -474,6 +474,12 @@ jobs:
             sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          [[ -c /dev/kvm ]] || {
+            echo '/dev/kvm is unavailable on this runner.' >&2
+            exit 69
+          }
+          sudo chmod 0666 /dev/kvm
           [[ -r /dev/kvm && -w /dev/kvm ]] || {
             echo 'The Android smoke runner cannot read and write /dev/kvm.' >&2
             exit 69

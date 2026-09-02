@@ -323,12 +323,14 @@ Future<void> main() async {
     'AvailableLibraries': [
       {
         'LibraryIdentifier': 'ios-arm64',
+        'BinaryPath': 'libsimple_torrent_native.a',
         'LibraryPath': 'libsimple_torrent_native.a',
         'SupportedArchitectures': ['arm64'],
         'SupportedPlatform': 'ios',
       },
       {
         'LibraryIdentifier': 'ios-arm64-simulator',
+        'BinaryPath': 'libsimple_torrent_native.a',
         'LibraryPath': 'libsimple_torrent_native.a',
         'SupportedArchitectures': ['arm64'],
         'SupportedPlatform': 'ios',
@@ -346,6 +348,7 @@ Future<void> main() async {
           'AvailableLibraries': [
             {
               'LibraryIdentifier': 'macos-arm64',
+              'BinaryPath': 'libsimple_torrent_native.a',
               'LibraryPath': 'libsimple_torrent_native.a',
               'SupportedArchitectures': ['arm64'],
               'SupportedPlatform': 'macos',
@@ -373,6 +376,31 @@ Future<void> main() async {
   _expectThrows(
     () => validateAppleXcframeworkMetadata(NativeTarget.ios, iosWrongVariant),
     'rejects incorrect iOS simulator variant metadata',
+  );
+  final iosWithDifferingArchiveNames =
+      (jsonDecode(jsonEncode(validIosPlist)) as Map).cast<String, Object?>();
+  final mismatchedSimulator =
+      (iosWithDifferingArchiveNames['AvailableLibraries']! as List)[1] as Map;
+  mismatchedSimulator['BinaryPath'] = 'libsimple_torrent_native_sim.a';
+  mismatchedSimulator['LibraryPath'] = 'libsimple_torrent_native_sim.a';
+  _expectThrows(
+    () => validateAppleXcframeworkMetadata(
+      NativeTarget.ios,
+      iosWithDifferingArchiveNames,
+    ),
+    'rejects differing iOS static archive names that CocoaPods cannot install',
+  );
+  final iosWithMismatchedBinaryPath =
+      (jsonDecode(jsonEncode(validIosPlist)) as Map).cast<String, Object?>();
+  ((iosWithMismatchedBinaryPath['AvailableLibraries']! as List)[1]
+          as Map)['BinaryPath'] =
+      'libsimple_torrent_native_sim.a';
+  _expectThrows(
+    () => validateAppleXcframeworkMetadata(
+      NativeTarget.ios,
+      iosWithMismatchedBinaryPath,
+    ),
+    'rejects an iOS BinaryPath that differs from the canonical archive name',
   );
   _expect(
     parseLipoArchitectures(' arm64  \n').single == 'arm64',
