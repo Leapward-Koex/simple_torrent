@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "builderVersion": "2.1.0",
+  "builderVersion": "2.1.1",
   "nativeAbi": 2,
   "sourceDateEpoch": 1773440070,
   "dependencies": {
@@ -145,7 +145,7 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.0",
+          "builderVersion": "2.1.1",
           "dependencies": {
             "boost": {
               "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
@@ -255,13 +255,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "181320cb0d9c150e6eca48df4cbe25947d656ceab92e89c9bf7a8542bbe5d882",
-              "size": 153494
+              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
+              "size": 153593
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "d326455e4416ae3e02e0b1fe19c8bd76f7c76c55dd96ecb87da844c35233639f",
+          "sha256": "b08567eb69de80f49408ed00495f09fcdea219cfddb43bdc933c17ca77d3b4d5",
           "target": "windows"
         },
         "recipe": {
@@ -400,7 +400,7 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.0",
+          "builderVersion": "2.1.1",
           "dependencies": {
             "boost": {
               "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
@@ -515,13 +515,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "181320cb0d9c150e6eca48df4cbe25947d656ceab92e89c9bf7a8542bbe5d882",
-              "size": 153494
+              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
+              "size": 153593
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "1d9dabaae7cc06a513bdafc577d33e4910623dfba57a8eb390568323ed77001f",
+          "sha256": "7dcda2ca1f41446928dacdfaa909c61fdac21e3472ec69bc82641ed72a66fb93",
           "target": "android"
         },
         "recipe": {
@@ -659,7 +659,7 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.0",
+          "builderVersion": "2.1.1",
           "dependencies": {
             "boost": {
               "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
@@ -769,13 +769,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "181320cb0d9c150e6eca48df4cbe25947d656ceab92e89c9bf7a8542bbe5d882",
-              "size": 153494
+              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
+              "size": 153593
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "6e407eb5f6cf2926077f8112e3cb17c5a65f795c2b417bdbaf1300187d3482cf",
+          "sha256": "790798724fcc92592e04cd7936292d2cc5eac3d6c1f4113a2cd84ab056958832",
           "target": "ios"
         },
         "recipe": {
@@ -827,7 +827,7 @@
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/Info.plist",
           "size": 1277,
-          "sha256": "9a6cea18d576395e462fa52327fc1e26e51de8562c741335e8edef5ca690d75c"
+          "sha256": "f698b87d804a78c59ea1f31057409cee51c1775afbb50bf0997ca9b934d389c9"
         },
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/Headers/module.modulemap",
@@ -924,7 +924,7 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.0",
+          "builderVersion": "2.1.1",
           "dependencies": {
             "boost": {
               "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
@@ -1034,13 +1034,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "181320cb0d9c150e6eca48df4cbe25947d656ceab92e89c9bf7a8542bbe5d882",
-              "size": 153494
+              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
+              "size": 153593
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "5c94606f6dba691cbb38b8bcb368add58e18a650017f0e5fdd40a897d54e7ca6",
+          "sha256": "94b4554b238a4845f801fb8dacb516d5b574b35d1946dfe7afabf049285a2379",
           "target": "macos"
         },
         "recipe": {
