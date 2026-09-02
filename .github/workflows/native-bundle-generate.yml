@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - .gitattributes
+      - .lfsconfig
       - native/CMakeLists.txt
       - native/dependencies.lock.json
       - native/include/**
@@ -18,6 +19,7 @@ on:
       - tool/native.sh
       - tool/src/native_builder.dart
       - .github/workflows/native-bundle-generate.yml
+      - .github/workflows/native-bundle-build.yml
       - .github/scripts/overlay-native-artifacts.sh
       - .github/scripts/sync-native-notices-from-candidate.sh
   workflow_dispatch:
@@ -49,495 +51,18 @@ jobs:
             exit 64
           fi
 
-  build-windows:
-    name: Build Windows x64 bundle
+  build-native-bundle:
+    name: Build complete native bundle
     needs: validate-source
-    # Use the current GA Windows image. NativeBuilder selects the compatibility
-    # MSVC 14.44 toolset and builds with pinned Ninja instead of a VS generator.
-    runs-on: windows-latest
-    timeout-minutes: 300
     permissions:
       contents: read
-    steps:
-      - name: Check out canonical source
-        uses: actions/checkout@v4
-        with:
-          lfs: false
-          persist-credentials: false
-
-      - name: Read pinned toolchains
-        id: toolchains
-        shell: pwsh
-        run: |
-          $lock = Get-Content native/dependencies.lock.json -Raw | ConvertFrom-Json
-          "flutter=$($lock.toolchains.flutter)" >> $env:GITHUB_OUTPUT
-          "cmake=$($lock.toolchains.cmake)" >> $env:GITHUB_OUTPUT
-          "ninja=$($lock.toolchains.ninja)" >> $env:GITHUB_OUTPUT
-          "msvc=$($lock.toolchains.msvcToolset)" >> $env:GITHUB_OUTPUT
-          "windows_sdk=$($lock.toolchains.windowsSdk)" >> $env:GITHUB_OUTPUT
-
-      - name: Install pinned Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          flutter-version: ${{ steps.toolchains.outputs.flutter }}
-          channel: stable
-          cache: false
-
-      - name: Install pinned CMake and Ninja
-        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
-        with:
-          cmakeVersion: ${{ steps.toolchains.outputs.cmake }}
-          ninjaVersion: ${{ steps.toolchains.outputs.ninja }}
-          useCloudCache: false
-          useLocalCache: false
-
-      - name: Select pinned MSVC and Windows SDK
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-        with:
-          arch: amd64
-          toolset: ${{ steps.toolchains.outputs.msvc }}
-          sdk: ${{ steps.toolchains.outputs.windows_sdk }}
-
-      - name: Assert Windows toolchains
-        shell: pwsh
-        run: |
-          # A fresh Flutter SDK bootstraps its tool on the first invocation and
-          # writes progress text to stdout. Warm it before requesting JSON so
-          # that bootstrap output cannot contaminate the machine response.
-          flutter --version | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "Flutter bootstrap failed with exit code $LASTEXITCODE" }
-          $flutterOutput = flutter --version --machine | Out-String
-          if ($LASTEXITCODE -ne 0) { throw "Flutter version query failed with exit code $LASTEXITCODE" }
-          $jsonStart = $flutterOutput.IndexOf('{')
-          $jsonEnd = $flutterOutput.LastIndexOf('}')
-          if ($jsonStart -lt 0 -or $jsonEnd -lt $jsonStart) {
-            throw "Flutter machine response did not contain a JSON object: $flutterOutput"
-          }
-          $flutterJson = $flutterOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
-          $flutter = ($flutterJson | ConvertFrom-Json -ErrorAction Stop).frameworkVersion
-          if ([string]::IsNullOrWhiteSpace($flutter)) { throw "Flutter machine response omitted frameworkVersion" }
-          if ($flutter -ne '${{ steps.toolchains.outputs.flutter }}') { throw "Flutter mismatch: $flutter" }
-          $cmake = ((cmake --version)[0] -split ' ')[2]
-          if ($cmake -ne '${{ steps.toolchains.outputs.cmake }}') { throw "CMake mismatch: $cmake" }
-          $ninja = (ninja --version).Trim()
-          if ($ninja -ne '${{ steps.toolchains.outputs.ninja }}') { throw "Ninja mismatch: $ninja" }
-          if (-not $env:VCToolsVersion.StartsWith('${{ steps.toolchains.outputs.msvc }}.')) {
-            throw "MSVC mismatch: $env:VCToolsVersion"
-          }
-          $sdk = $env:WindowsSDKVersion.TrimEnd('\')
-          if ($sdk -ne '${{ steps.toolchains.outputs.windows_sdk }}') { throw "Windows SDK mismatch: $sdk" }
-          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw "Expected an AMD64 host." }
-
-      - name: Restore authenticated dependency downloads
-        uses: actions/cache@v4
-        with:
-          path: .native-cache/downloads
-          key: native-downloads-${{ runner.os }}-${{ hashFiles('native/dependencies.lock.json') }}
-
-      - name: Build and verify Windows bundle
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force build/native/ci-logs, build/native/fragments | Out-Null
-          & .\tool\native.ps1 build windows --source-sha $env:GITHUB_SHA 2>&1 |
-            Tee-Object -FilePath build/native/ci-logs/windows.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Copy-Item native/artifacts.manifest.json build/native/fragments/windows.manifest.json
-          $sourceShaPath = 'build/native/fragments/windows.source-sha'
-          Set-Content -LiteralPath $sourceShaPath -Value $env:GITHUB_SHA -NoNewline -Encoding utf8NoBOM
-          if (
-            -not (Test-Path -LiteralPath $sourceShaPath -PathType Leaf) -or
-            (Get-Content -LiteralPath $sourceShaPath -Raw) -cne $env:GITHUB_SHA
-          ) {
-            throw 'Windows fragment source SHA was not written correctly.'
-          }
-
-      - name: Upload Windows fragment
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-build-windows
-          if-no-files-found: warn
-          retention-days: 3
-          compression-level: 0
-          path: |
-            packages/simple_torrent_windows/windows/lib
-            packages/simple_torrent_windows/windows/include
-            build/native/fragments/windows.manifest.json
-            build/native/fragments/windows.source-sha
-            build/native/ci-logs/windows.log
-
-  build-android:
-    name: Build Android ARM and x86_64 bundle
-    needs: validate-source
-    runs-on: ubuntu-24.04
-    timeout-minutes: 300
-    permissions:
-      contents: read
-    steps:
-      - name: Check out canonical source
-        uses: actions/checkout@v4
-        with:
-          lfs: false
-          persist-credentials: false
-
-      - name: Enable repository shell tools
-        shell: bash
-        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
-
-      - name: Read pinned toolchains
-        id: toolchains
-        shell: bash
-        run: |
-          set -euo pipefail
-          for key in flutter cmake ninja jdk androidNdk; do
-            output_name="${key}"
-            [[ "$key" == "androidNdk" ]] && output_name="android_ndk"
-            printf '%s=%s\n' "$output_name" "$(jq -r ".toolchains.${key}" native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
-          done
-
-      - name: Install pinned Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          flutter-version: ${{ steps.toolchains.outputs.flutter }}
-          channel: stable
-          cache: false
-
-      - name: Install pinned CMake and Ninja
-        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
-        with:
-          cmakeVersion: ${{ steps.toolchains.outputs.cmake }}
-          ninjaVersion: ${{ steps.toolchains.outputs.ninja }}
-          useCloudCache: false
-          useLocalCache: false
-
-      - name: Install pinned JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ steps.toolchains.outputs.jdk }}
-
-      - name: Configure Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-
-      - name: Install pinned Android NDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdkmanager "ndk;${{ steps.toolchains.outputs.android_ndk }}"
-          printf 'ANDROID_NDK_ROOT=%s/ndk/%s\n' "$ANDROID_SDK_ROOT" '${{ steps.toolchains.outputs.android_ndk }}' >> "$GITHUB_ENV"
-          printf 'ANDROID_NDK=%s/ndk/%s\n' "$ANDROID_SDK_ROOT" '${{ steps.toolchains.outputs.android_ndk }}' >> "$GITHUB_ENV"
-
-      - name: Assert Android toolchains
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Avoid mixing first-run Flutter bootstrap progress with machine JSON.
-          flutter --version >/dev/null
-          flutter_json="$(flutter --version --machine)"
-          flutter_version="$(printf '%s\n' "$flutter_json" | jq -er '.frameworkVersion')"
-          [[ "$flutter_version" == '${{ steps.toolchains.outputs.flutter }}' ]] || {
-            echo "Flutter mismatch: $flutter_version" >&2
-            exit 69
-          }
-          [[ "$(cmake --version | awk 'NR == 1 {print $3}')" == '${{ steps.toolchains.outputs.cmake }}' ]]
-          [[ "$(ninja --version)" == '${{ steps.toolchains.outputs.ninja }}' ]]
-          java_spec="$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java[.]specification[.]version/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
-          [[ "$java_spec" == '${{ steps.toolchains.outputs.jdk }}' ]]
-          if ! ndk_revision="$(awk -F= '
-            function trim(value) {
-              gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-              return value
-            }
-            {
-              raw = trim($0)
-              key = trim($1)
-              if ((raw ~ /^Pkg[.]BaseRevision([[:space:]]|:|$)/ && key != "Pkg.BaseRevision") ||
-                  (raw ~ /^Pkg[.]Revision([[:space:]]|:|$)/ && key != "Pkg.Revision")) {
-                invalid = 1
-              }
-              if (key == "Pkg.BaseRevision") {
-                base_count++
-                if (NF != 2 || base_count != 1) invalid = 1
-                base = trim($2)
-              } else if (key == "Pkg.Revision") {
-                revision_count++
-                if (NF != 2 || revision_count != 1) invalid = 1
-                revision = trim($2)
-              }
-            }
-            END {
-              if (invalid || base_count > 1 || revision_count > 1) exit 2
-              if (base_count == 1) {
-                if (base == "") exit 2
-                print base
-                exit
-              }
-              if (revision_count == 1 && revision != "") {
-                print revision
-                exit
-              }
-              exit 2
-            }
-          ' "$ANDROID_NDK_ROOT/source.properties")"; then
-            echo "Android NDK source.properties has missing, duplicate, or malformed revision metadata." >&2
-            exit 69
-          fi
-          [[ "$ndk_revision" == '${{ steps.toolchains.outputs.android_ndk }}' ]] || {
-            echo "Android NDK mismatch: $ndk_revision" >&2
-            exit 69
-          }
-          [[ "$(uname -m)" == "x86_64" ]]
-
-      - name: Restore authenticated dependency downloads
-        uses: actions/cache@v4
-        with:
-          path: .native-cache/downloads
-          key: native-downloads-${{ runner.os }}-${{ hashFiles('native/dependencies.lock.json') }}
-
-      - name: Build and verify Android bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/native/ci-logs build/native/fragments
-          ./tool/native.sh build android --source-sha "$GITHUB_SHA" 2>&1 | tee build/native/ci-logs/android.log
-          cp native/artifacts.manifest.json build/native/fragments/android.manifest.json
-          printf '%s' "$GITHUB_SHA" > build/native/fragments/android.source-sha
-
-      - name: Upload Android fragment
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-build-android
-          if-no-files-found: warn
-          retention-days: 3
-          compression-level: 0
-          path: |
-            packages/simple_torrent_android/android/src/main/jniLibs
-            packages/simple_torrent_android/android/src/main/cpp/include
-            build/native/fragments/android.manifest.json
-            build/native/fragments/android.source-sha
-            build/native/ci-logs/android.log
-
-  build-apple:
-    name: Build Apple ARM bundles
-    needs: validate-source
-    runs-on: macos-26
-    timeout-minutes: 360
-    permissions:
-      contents: read
-    steps:
-      - name: Check out canonical source
-        uses: actions/checkout@v4
-        with:
-          lfs: false
-          persist-credentials: false
-
-      - name: Enable repository shell tools
-        shell: bash
-        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
-
-      - name: Read pinned toolchains
-        id: toolchains
-        shell: bash
-        run: |
-          set -euo pipefail
-          for key in flutter cmake ninja xcode; do
-            printf '%s=%s\n' "$key" "$(jq -r ".toolchains.${key}" native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
-          done
-
-      - name: Select pinned Xcode
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected='${{ steps.toolchains.outputs.xcode }}'
-          major_minor="${expected%.*}"
-          developer_dir="/Applications/Xcode_${major_minor}.app/Contents/Developer"
-          [[ -d "$developer_dir" ]] || { echo "Pinned Xcode is missing: $developer_dir" >&2; exit 69; }
-          printf 'DEVELOPER_DIR=%s\n' "$developer_dir" >> "$GITHUB_ENV"
-          actual="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | awk 'NR == 1 {print $2}')"
-          [[ "$actual" == "$expected" ]] || { echo "Xcode mismatch: $actual" >&2; exit 69; }
-          [[ "$(uname -m)" == "arm64" ]] || { echo "macos-26 must be an ARM64 runner." >&2; exit 69; }
-
-      - name: Install pinned Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          flutter-version: ${{ steps.toolchains.outputs.flutter }}
-          channel: stable
-          cache: false
-
-      - name: Install pinned CMake and Ninja
-        uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
-        with:
-          cmakeVersion: ${{ steps.toolchains.outputs.cmake }}
-          ninjaVersion: ${{ steps.toolchains.outputs.ninja }}
-          useCloudCache: false
-          useLocalCache: false
-
-      - name: Assert Apple toolchains
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Avoid mixing first-run Flutter bootstrap progress with machine JSON.
-          flutter --version >/dev/null
-          flutter_json="$(flutter --version --machine)"
-          flutter_version="$(printf '%s\n' "$flutter_json" | jq -er '.frameworkVersion')"
-          [[ "$flutter_version" == '${{ steps.toolchains.outputs.flutter }}' ]] || {
-            echo "Flutter mismatch: $flutter_version" >&2
-            exit 69
-          }
-          [[ "$(cmake --version | awk 'NR == 1 {print $3}')" == '${{ steps.toolchains.outputs.cmake }}' ]]
-          [[ "$(ninja --version)" == '${{ steps.toolchains.outputs.ninja }}' ]]
-          [[ "$(xcodebuild -version | awk 'NR == 1 {print $2}')" == '${{ steps.toolchains.outputs.xcode }}' ]]
-
-      - name: Restore authenticated dependency downloads
-        uses: actions/cache@v4
-        with:
-          path: .native-cache/downloads
-          key: native-downloads-${{ runner.os }}-${{ hashFiles('native/dependencies.lock.json') }}
-
-      - name: Build and verify iOS bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/native/ci-logs build/native/fragments
-          ./tool/native.sh build ios --arch arm64 --arch sim-arm64 --source-sha "$GITHUB_SHA" \
-            2>&1 | tee build/native/ci-logs/ios.log
-          cp native/artifacts.manifest.json build/native/fragments/ios.manifest.json
-          printf '%s' "$GITHUB_SHA" > build/native/fragments/ios.source-sha
-
-      - name: Remove iOS intermediates
-        shell: bash
-        run: ./tool/native.sh clean ios
-
-      - name: Build and verify macOS bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./tool/native.sh build macos --arch arm64 --source-sha "$GITHUB_SHA" \
-            2>&1 | tee build/native/ci-logs/macos.log
-          cp native/artifacts.manifest.json build/native/fragments/macos.manifest.json
-          printf '%s' "$GITHUB_SHA" > build/native/fragments/macos.source-sha
-
-      - name: Upload Apple fragments
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-build-apple
-          if-no-files-found: warn
-          retention-days: 3
-          compression-level: 0
-          path: |
-            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework
-            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
-            build/native/fragments/ios.manifest.json
-            build/native/fragments/ios.source-sha
-            build/native/fragments/macos.manifest.json
-            build/native/fragments/macos.source-sha
-            build/native/ci-logs/ios.log
-            build/native/ci-logs/macos.log
-
-  assemble:
-    name: Assemble complete native bundle
-    needs:
-      - build-windows
-      - build-android
-      - build-apple
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Check out canonical source
-        uses: actions/checkout@v4
-        with:
-          lfs: false
-          persist-credentials: false
-
-      - name: Enable repository shell tools
-        shell: bash
-        run: chmod +x tool/native.sh tool/test-sample.sh tool/test-suspension.sh
-
-      - name: Read pinned Flutter
-        id: toolchains
-        shell: bash
-        run: printf 'flutter=%s\n' "$(jq -r .toolchains.flutter native/dependencies.lock.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Install pinned Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          flutter-version: ${{ steps.toolchains.outputs.flutter }}
-          channel: stable
-          cache: false
-
-      - name: Download platform fragments
-        uses: actions/download-artifact@v4
-        with:
-          pattern: native-build-*
-          path: incoming
-          merge-multiple: true
-
-      - name: Check fragment source SHAs
-        shell: bash
-        run: |
-          set -euo pipefail
-          for platform in windows android ios macos; do
-            test "$(cat "incoming/build/native/fragments/${platform}.source-sha")" = "$GITHUB_SHA" || {
-              echo "Fragment source SHA mismatch for $platform." >&2
-              exit 65
-            }
-          done
-
-      - name: Overlay platform staging roots
-        shell: bash
-        run: bash .github/scripts/overlay-native-artifacts.sh incoming
-
-      - name: Assemble manifest and synchronize notices
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/native/ci-logs
-          ./tool/native.sh assemble \
-            --fragment "windows=incoming/build/native/fragments/windows.manifest.json" \
-            --fragment "android=incoming/build/native/fragments/android.manifest.json" \
-            --fragment "ios=incoming/build/native/fragments/ios.manifest.json" \
-            --fragment "macos=incoming/build/native/fragments/macos.manifest.json" \
-            --source-sha "$GITHUB_SHA" 2>&1 | tee build/native/ci-logs/assembly.log
-          ./tool/native.sh sync-metadata 2>&1 | tee -a build/native/ci-logs/assembly.log
-
-      - name: Upload complete candidate bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-bundle-candidate
-          if-no-files-found: error
-          retention-days: 3
-          compression-level: 0
-          path: |
-            packages/simple_torrent_windows/windows/lib
-            packages/simple_torrent_windows/windows/include
-            packages/simple_torrent_android/android/src/main/jniLibs
-            packages/simple_torrent_android/android/src/main/cpp/include
-            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework
-            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
-            native/artifacts.manifest.json
-            THIRD_PARTY_NOTICES.md
-            packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md
-            packages/simple_torrent_android/THIRD_PARTY_NOTICES.md
-            packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md
-            packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md
-
-      - name: Upload assembly log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-bundle-assembly-log
-          if-no-files-found: warn
-          retention-days: 3
-          path: |
-            build/native/ci-logs/assembly.log
+    uses: ./.github/workflows/native-bundle-build.yml
+    with:
+      source_sha: ${{ github.sha }}
 
   publish:
     name: Publish native bundle pull request
-    needs: assemble
+    needs: build-native-bundle
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -575,13 +100,19 @@ jobs:
             exit 0
           fi
 
+          changed_paths="$(mktemp)"
+          trap 'rm -f "$changed_paths"' EXIT
+          git diff --no-renames --name-only --diff-filter=ACMRTD -z \
+            "$GITHUB_SHA" "$latest_sha" > "$changed_paths"
+
           while IFS= read -r -d '' path; do
             case "$path" in
-              .gitattributes|native/CMakeLists.txt|native/dependencies.lock.json|native/include/*|\
+              .gitattributes|.lfsconfig|native/CMakeLists.txt|native/dependencies.lock.json|native/include/*|\
               native/src/*|native/platform/*|native/patches/*|native/test/*|\
               tool/native.dart|tool/native.ps1|tool/native.sh|\
               tool/src/native_builder.dart|\
               .github/workflows/native-bundle-generate.yml|\
+              .github/workflows/native-bundle-build.yml|\
               .github/scripts/overlay-native-artifacts.sh|\
               .github/scripts/sync-native-notices-from-candidate.sh)
                 echo "Master changed native generation input or tooling while this run was building: $path" >&2
@@ -589,7 +120,7 @@ jobs:
                 exit 75
                 ;;
             esac
-          done < <(git diff --no-renames --name-only --diff-filter=ACMRTD -z "$GITHUB_SHA" "$latest_sha")
+          done < "$changed_paths"
 
           echo "Master advanced only through unrelated paths; publishing on $latest_sha."
           GIT_LFS_SKIP_SMUDGE=1 git checkout --detach "$latest_sha"
@@ -611,9 +142,15 @@ jobs:
           install -m 0644 "$candidate/native/artifacts.manifest.json" native/artifacts.manifest.json
           bash .github/scripts/sync-native-notices-from-candidate.sh "$candidate"
 
-          mapfile -d '' changed < <(
-            { git diff --name-only -z; git ls-files --others --exclude-standard -z; } | sort -zu
-          )
+          tracked_paths="$(mktemp)"
+          untracked_paths="$(mktemp)"
+          changed_paths="$(mktemp)"
+          binary_paths="$(mktemp)"
+          trap 'rm -f "$tracked_paths" "$untracked_paths" "$changed_paths" "$binary_paths"' EXIT
+          git diff --name-only -z > "$tracked_paths"
+          git ls-files --others --exclude-standard -z > "$untracked_paths"
+          sort -zu "$tracked_paths" "$untracked_paths" > "$changed_paths"
+          mapfile -d '' changed < "$changed_paths"
           if (( ${#changed[@]} == 0 )); then
             echo "No native bundle changes were produced."
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -656,6 +193,13 @@ jobs:
             packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework
 
           binary_count=0
+          find \
+            packages/simple_torrent_windows/windows/lib \
+            packages/simple_torrent_android/android/src/main/jniLibs \
+            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework \
+            -type f \( -name '*.dll' -o -name '*.lib' -o -name '*.so' -o -name '*.a' \) \
+            -print0 > "$binary_paths"
           while IFS= read -r -d '' file; do
             path="${file#./}"
             ((binary_count += 1))
@@ -674,12 +218,7 @@ jobs:
               echo "Git LFS object is missing for $path" >&2
               exit 65
             }
-          done < <(find \
-            packages/simple_torrent_windows/windows/lib \
-            packages/simple_torrent_android/android/src/main/jniLibs \
-            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework \
-            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework \
-            -type f \( -name '*.dll' -o -name '*.lib' -o -name '*.so' -o -name '*.a' \) -print0)
+          done < "$binary_paths"
           (( binary_count > 0 )) || { echo "Candidate contains no generated binaries." >&2; exit 65; }
           git lfs fsck --pointers
 
