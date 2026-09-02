@@ -5,12 +5,13 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 const nativeArtifactManifestSchemaVersion = 2;
-const nativeBuilderVersion = '2.1.0';
+const nativeBuilderVersion = '2.1.1';
 const simpleTorrentNativeAbiVersion = 2;
 const nativePlatformProvenanceSchemaVersion = 1;
 const nativeInputFingerprintSchemaVersion = 1;
 
 const _supportedAndroidArchitectures = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
+const _appleStaticArchiveName = 'libsimple_torrent_native.a';
 const _generatedNoticeStart = '<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->';
 const _generatedNoticeEnd = '<!-- END GENERATED NATIVE DEPENDENCIES -->';
 
@@ -1562,7 +1563,7 @@ final class NativeBuilder {
     final simulatorSlices = [merged['sim-arm64']].whereType<File>().toList();
     if (simulatorSlices.isNotEmpty) {
       final simulator = File(
-        _join(frameworkBuild.path, 'libsimple_torrent_native_sim.a'),
+        _join(frameworkBuild.path, _appleStaticArchiveName),
       );
       if (simulatorSlices.length == 1) {
         await simulatorSlices.single.copy(simulator.path);
@@ -1627,9 +1628,7 @@ final class NativeBuilder {
       await _deleteDirectoryWithin(frameworkBuild, buildRoot);
     }
     await frameworkBuild.create(recursive: true);
-    final universal = File(
-      _join(frameworkBuild.path, 'libsimple_torrent_native_universal.a'),
-    );
+    final universal = File(_join(frameworkBuild.path, _appleStaticArchiveName));
     if (slices.length == 1) {
       await slices.single.copy(universal.path);
     } else {
@@ -3009,13 +3008,11 @@ final class NativeBuilder {
       '--target',
       'simple_torrent_native',
     ], environment: environment);
-    final native = await _findFile(nativeBuild, 'libsimple_torrent_native.a');
+    final native = await _findFile(nativeBuild, _appleStaticArchiveName);
     final libtorrent = await _findFile(nativeBuild, 'libtorrent-rasterbar.a');
     final libssl = await _findFile(opensslPrefix, 'libssl.a');
     final libcrypto = await _findFile(opensslPrefix, 'libcrypto.a');
-    final merged = File(
-      _join(platformBuild.path, 'libsimple_torrent_native_merged.a'),
-    );
+    final merged = File(_join(platformBuild.path, _appleStaticArchiveName));
     if (merged.existsSync()) await merged.delete();
     await _run('xcrun', [
       'libtool',
@@ -4211,6 +4208,7 @@ List<AppleXcframeworkLibrary> validateAppleXcframeworkMetadata(
     final value = raw.cast<String, Object?>();
     final identifier = value['LibraryIdentifier'];
     final libraryPath = value['LibraryPath'];
+    final binaryPath = value['BinaryPath'];
     final platform = value['SupportedPlatform'];
     final variant = value['SupportedPlatformVariant'];
     final rawArchitectures = value['SupportedArchitectures'];
@@ -4220,7 +4218,8 @@ List<AppleXcframeworkLibrary> validateAppleXcframeworkMetadata(
         identifier.contains('\\') ||
         !identifiers.add(identifier) ||
         libraryPath is! String ||
-        !libraryPath.endsWith('.a') ||
+        libraryPath != _appleStaticArchiveName ||
+        binaryPath != _appleStaticArchiveName ||
         platform is! String ||
         (variant != null && variant is! String) ||
         (variant is String && variant.isEmpty) ||

@@ -137,15 +137,18 @@ binary inspection.
 
 ### Automated bundle regeneration
 
-`.github/workflows/native-bundle-generate.yml` watches the canonical native
-inputs on `master`. It builds Windows x64 on `windows-latest`, all three Android
-ABIs, and ARM-only iOS/macOS XCFrameworks on separate hosted runners. The
-Windows build selects the compatibility MSVC 14.44 toolset and SDK 26100 from
-the current Visual Studio installation, then uses the pinned CMake and Ninja
-versions so it does not depend on a particular Visual Studio generator. The
-Apple job uses the explicit ARM64 `macos-26` image and Xcode 26.4.1. Toolchain
-versions are read from `native/dependencies.lock.json` and asserted before each
-build.
+`.github/workflows/native-bundle-build.yml` is the reusable, read-only builder
+used by both pull-request validation and master publication. It builds Windows
+x64 on `windows-latest`, all three Android ABIs, and ARM-only iOS/macOS
+XCFrameworks on separate hosted runners. The Windows build selects the
+compatibility MSVC 14.44 toolset and SDK 26100 from the current Visual Studio
+installation, then uses the pinned CMake and Ninja versions so it does not
+depend on a particular Visual Studio generator. The Apple job uses the explicit
+ARM64 `macos-26` image and Xcode 26.4.1. Toolchain versions are read from
+`native/dependencies.lock.json` and asserted before each build.
+
+`.github/workflows/native-bundle-generate.yml` invokes that builder when a
+canonical native input reaches `master`, then publishes the assembled result.
 
 Each runner publishes a source-authenticated manifest fragment. The assembly
 job accepts exactly one complete fragment per platform, overlays the staged
@@ -169,9 +172,22 @@ LFS, then creates or updates `bot/native-bundle`. Identical output is a
 successful no-op.
 
 `.github/workflows/native-bundle-gate.yml` is the stable pull-request gate.
-Non-bundle pull requests pass quickly; bundle pull requests verify and exercise
-Windows, Android x86_64, macOS ARM64, and an explicitly booted iOS ARM64
-Simulator. The public WIRED download remains manual or scheduled.
+Pull requests that change canonical native inputs first build an ephemeral
+bundle from GitHub's prospective merge commit. The four smoke jobs download and
+overlay that exact assembled candidate, then verify and exercise Windows,
+Android x86_64, macOS ARM64, and an explicitly booted iOS ARM64 Simulator.
+Generated bundle-only pull requests retain the stricter committed Git LFS
+pointer and object checks before running the same smoke coverage. Pull requests
+that mix canonical inputs with generated bundle files are rejected, while
+unrelated pull requests pass quickly. All pull-request build and smoke jobs are
+read-only and receive no publication credentials. The public WIRED download
+remains manual or scheduled.
+
+After a native-input pull request passes and merges, master generation rebuilds
+the bundle from the resulting master commit and opens or updates
+`bot/native-bundle`. This intentionally repeats the build and smoke coverage:
+the source pull request proves the prospective bundle works, while the bot pull
+request authenticates and tests the exact LFS objects that will be committed.
 
 Repository setup must allow Actions to write contents and create pull requests,
 enable auto-merge, and use an active repository ruleset that requires the

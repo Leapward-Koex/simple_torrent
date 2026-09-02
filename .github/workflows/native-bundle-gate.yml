@@ -18,13 +18,14 @@ env:
 
 jobs:
   classify:
-    name: Detect bundled native changes
+    name: Detect native source and bundle changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       bundle: ${{ steps.changes.outputs.bundle }}
+      source: ${{ steps.changes.outputs.source }}
     steps:
       - name: Check out pull request
         uses: actions/checkout@v4
@@ -48,30 +49,90 @@ jobs:
         run: |
           set -euo pipefail
           bundle=false
+          source=false
           if [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" && "$HEAD_REF" == bot/native-bundle ]]; then
             bundle=true
-          else
-            while IFS= read -r path; do
-              case "$path" in
-                native/artifacts.manifest.json|\
-                packages/simple_torrent_windows/windows/lib/*|\
-                packages/simple_torrent_windows/windows/include/*|\
-                packages/simple_torrent_android/android/src/main/jniLibs/*|\
-                packages/simple_torrent_android/android/src/main/cpp/include/*|\
-                packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/*|\
-                packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/*)
-                  bundle=true
-                  break
-                  ;;
-              esac
-            done < <(git diff --no-renames --name-only --diff-filter=ACMRTD "$BASE_SHA" "$HEAD_SHA")
           fi
+
+          changed_paths="$(mktemp)"
+          trap 'rm -f "$changed_paths"' EXIT
+          git diff --no-renames --name-only --diff-filter=ACMRTD -z \
+            "$BASE_SHA...$HEAD_SHA" > "$changed_paths"
+
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              .gitattributes|\
+              native/CMakeLists.txt|\
+              native/dependencies.lock.json|\
+              native/include/*|\
+              native/src/*|\
+              native/platform/*|\
+              native/patches/*|\
+              native/test/*|\
+              tool/native.dart|\
+              tool/native.ps1|\
+              tool/native.sh|\
+              tool/test-sample.ps1|\
+              tool/test-sample.sh|\
+              tool/test-suspension.ps1|\
+              tool/test-suspension.sh|\
+              tool/run_with_timeout.py|\
+              tool/test/run_with_timeout_test.py|\
+              tool/src/native_builder.dart|\
+              .github/workflows/native-bundle-build.yml|\
+              .github/workflows/native-bundle-gate.yml|\
+              .github/workflows/native-bundle-generate.yml|\
+              .github/scripts/overlay-native-artifacts.sh|\
+              .github/scripts/sync-native-notices-from-candidate.sh)
+                source=true
+                ;;
+              .lfsconfig|\
+              THIRD_PARTY_NOTICES.md|\
+              native/artifacts.manifest.json|\
+              packages/simple_torrent_windows/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_windows/windows/lib/*|\
+              packages/simple_torrent_windows/windows/include/*|\
+              packages/simple_torrent_android/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_android/android/src/main/jniLibs/*|\
+              packages/simple_torrent_android/android/src/main/cpp/include/*|\
+              packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/*|\
+              packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md|\
+              packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/*)
+                bundle=true
+                ;;
+            esac
+          done < "$changed_paths"
+
+          if [[ "$source" == true && "$bundle" == true ]]; then
+            echo 'A pull request may not mix canonical native inputs with generated bundle files.' >&2
+            exit 65
+          fi
+
           printf 'bundle=%s\n' "$bundle" >> "$GITHUB_OUTPUT"
+          printf 'source=%s\n' "$source" >> "$GITHUB_OUTPUT"
+
+  build-candidate:
+    name: Build candidate native bundle
+    needs: classify
+    if: needs.classify.outputs.source == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native-bundle-build.yml
+    with:
+      source_sha: ${{ github.sha }}
 
   smoke:
     name: Native bundle smoke (${{ matrix.platform }})
-    needs: classify
-    if: needs.classify.outputs.bundle == 'true'
+    needs:
+      - classify
+      - build-candidate
+    if: >-
+      always() &&
+      needs.classify.result == 'success' &&
+      (needs.classify.outputs.bundle == 'true' ||
+       (needs.classify.outputs.source == 'true' &&
+        needs.build-candidate.result == 'success'))
     strategy:
       fail-fast: false
       matrix:
@@ -90,14 +151,52 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check out pull-request binaries through LFS
+      - name: Check out pull request
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           lfs: false
           persist-credentials: false
 
+      - name: Download candidate native bundle
+        if: needs.classify.outputs.source == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: native-bundle-candidate
+          path: .native-bundle-candidate
+
+      - name: Install candidate native bundle
+        if: needs.classify.outputs.source == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$PWD/.native-bundle-candidate"
+          bash .github/scripts/overlay-native-artifacts.sh "$candidate"
+          install -m 0644 "$candidate/native/artifacts.manifest.json" native/artifacts.manifest.json
+          bash .github/scripts/sync-native-notices-from-candidate.sh "$candidate"
+
+          binary_count=0
+          binary_paths="$(mktemp)"
+          trap 'rm -f "$binary_paths"' EXIT
+          find \
+            packages/simple_torrent_windows/windows/lib \
+            packages/simple_torrent_android/android/src/main/jniLibs \
+            packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework \
+            packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework \
+            -type f \( -name '*.dll' -o -name '*.lib' -o -name '*.so' -o -name '*.a' \) \
+            -print0 > "$binary_paths"
+          while IFS= read -r -d '' file; do
+            path="${file#./}"
+            ((binary_count += 1))
+            [[ "$(git check-attr filter -- "$path" | awk '{print $3}')" == lfs ]] || {
+              echo "Candidate binary is not covered by a Git LFS rule: $path" >&2
+              exit 65
+            }
+          done < "$binary_paths"
+          (( binary_count > 0 )) || { echo 'Candidate contains no generated binaries.' >&2; exit 65; }
+
       - name: Fetch and validate platform Git LFS objects
+        if: needs.classify.outputs.bundle == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -110,11 +209,14 @@ jobs:
           esac
           git lfs install --local
           expected_binaries=()
+          tree_paths="$(mktemp)"
+          trap 'rm -f "$tree_paths"' EXIT
+          git ls-tree -r -z --name-only HEAD -- "$prefix" > "$tree_paths"
           while IFS= read -r -d '' file; do
             case "$file" in
               *.dll|*.lib|*.so|*.a) expected_binaries+=("$file") ;;
             esac
-          done < <(git ls-tree -r -z --name-only HEAD -- "$prefix")
+          done < "$tree_paths"
           (( ${#expected_binaries[@]} > 0 )) || { echo "No native binaries found below $prefix." >&2; exit 65; }
           for file in "${expected_binaries[@]}"; do
             [[ "$(git check-attr --cached filter -- "$file" | awk '{print $3}')" == lfs ]] || {
@@ -372,6 +474,12 @@ jobs:
             sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          [[ -c /dev/kvm ]] || {
+            echo '/dev/kvm is unavailable on this runner.' >&2
+            exit 69
+          }
+          sudo chmod 0666 /dev/kvm
           [[ -r /dev/kvm && -w /dev/kvm ]] || {
             echo 'The Android smoke runner cannot read and write /dev/kvm.' >&2
             exit 69
@@ -519,6 +627,7 @@ jobs:
     if: always()
     needs:
       - classify
+      - build-candidate
       - smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -529,18 +638,32 @@ jobs:
         shell: bash
         env:
           BUNDLE: ${{ needs.classify.outputs.bundle }}
+          SOURCE: ${{ needs.classify.outputs.source }}
           CLASSIFY_RESULT: ${{ needs.classify.result }}
+          BUILD_CANDIDATE_RESULT: ${{ needs.build-candidate.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
         run: |
           set -euo pipefail
           if [[ "$CLASSIFY_RESULT" != success ]]; then
-            echo "Bundle classification did not succeed: $CLASSIFY_RESULT" >&2
+            echo "Native-change classification did not succeed: $CLASSIFY_RESULT" >&2
             exit 1
           fi
-          if [[ "$BUNDLE" != true ]]; then
-            echo 'No committed native-bundle files changed; the gate passes without platform jobs.'
+
+          if [[ "$SOURCE" == true ]]; then
+            if [[ "$BUILD_CANDIDATE_RESULT" != success ]]; then
+              echo "Candidate native-bundle build did not succeed: $BUILD_CANDIDATE_RESULT" >&2
+              exit 1
+            fi
+          elif [[ "$BUILD_CANDIDATE_RESULT" != skipped ]]; then
+            echo "Candidate native-bundle build had an unexpected result: $BUILD_CANDIDATE_RESULT" >&2
+            exit 1
+          fi
+
+          if [[ "$SOURCE" != true && "$BUNDLE" != true ]]; then
+            echo 'No canonical native inputs or committed native-bundle files changed; the gate passes without platform jobs.'
             exit 0
           fi
+
           if [[ "$SMOKE_RESULT" != success ]]; then
             echo "At least one native-bundle platform smoke failed: $SMOKE_RESULT" >&2
             exit 1
