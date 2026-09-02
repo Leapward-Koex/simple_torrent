@@ -24,6 +24,13 @@ void main() {
     'packages/simple_torrent/example/integration_test/'
     'transfer_suspension_test.dart',
   ).readAsStringSync();
+  final pluginIntegration = File(
+    'packages/simple_torrent/example/integration_test/'
+    'plugin_integration_test.dart',
+  ).readAsStringSync();
+  final wiredDownload = File(
+    'packages/simple_torrent/example/integration_test/wired_download_test.dart',
+  ).readAsStringSync();
 
   final checks = <String, bool>{
     'PowerShell accepts all four native platforms': powershell.contains(
@@ -197,6 +204,19 @@ void main() {
     'deterministic suspension test accepts all four native platforms':
         transferSuspension.contains(
           "anyOf('windows', 'android', 'macos', 'ios')",
+        ),
+    'native integration tests disable unused semantics leak tracking':
+        pluginIntegration.contains('semanticsEnabled: false') &&
+        pluginIntegration.contains(
+          'platformDispatcher.semanticsEnabledTestValue = false',
+        ) &&
+        transferSuspension.contains('semanticsEnabled: false') &&
+        transferSuspension.contains(
+          'platformDispatcher.semanticsEnabledTestValue = false',
+        ) &&
+        wiredDownload.contains('semanticsEnabled: false') &&
+        wiredDownload.contains(
+          'platformDispatcher.semanticsEnabledTestValue = false',
         ),
     'deterministic suspension test cleans up after failures':
         transferSuspension.contains('} finally {') &&
