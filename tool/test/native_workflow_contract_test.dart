@@ -8,10 +8,14 @@ void main() {
   const gatePath = '.github/workflows/native-bundle-gate.yml';
   const overlayPath = '.github/scripts/overlay-native-artifacts.sh';
   const attributesPath = '.gitattributes';
-  final generation = File(generationPath).readAsStringSync();
-  final gate = File(gatePath).readAsStringSync();
-  final overlay = File(overlayPath).readAsStringSync();
-  final attributes = File(attributesPath).readAsStringSync();
+  final generation = File(generationPath)
+      .readAsStringSync()
+      .replaceAll('\r\n', '\n');
+  final gate = File(gatePath).readAsStringSync().replaceAll('\r\n', '\n');
+  final overlay = File(overlayPath).readAsStringSync().replaceAll('\r\n', '\n');
+  final attributes = File(attributesPath)
+      .readAsStringSync()
+      .replaceAll('\r\n', '\n');
 
   const iosFrameworkDirectory =
       'packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks';

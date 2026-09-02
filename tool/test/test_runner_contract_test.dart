@@ -15,8 +15,9 @@ void main() {
     'packages/simple_torrent/example/ios/Runner.xcodeproj/'
     'xcshareddata/xcschemes/Runner.xcscheme',
   ).readAsStringSync();
-  final iosPodfile = File('packages/simple_torrent/example/ios/Podfile')
-      .readAsStringSync();
+  final iosProject = File(
+    'packages/simple_torrent/example/ios/Runner.xcodeproj/project.pbxproj',
+  ).readAsStringSync();
   final transferSuspension = File(
     'packages/simple_torrent/example/integration_test/'
     'transfer_suspension_test.dart',
@@ -107,22 +108,40 @@ void main() {
     'iOS XCTest is not marked parallelizable in the shared scheme':
         iosScheme.contains('parallelizable = "NO"') &&
         !iosScheme.contains('parallelizable = "YES"'),
-    'iOS XCTest adapter inherits app-hosted CocoaPods search paths':
-        RegExp(r"target 'RunnerTests'[\s\S]{0,100}inherit! :search_paths")
-            .hasMatch(iosPodfile) &&
-        shell.contains('--no-enable-swift-package-manager') &&
-        shell.contains("grep -Fq 'integration_test'") &&
-        shell.contains("grep -Fq 'simple_torrent_ios'"),
-    'iOS XCTest isolates CocoaPods from the generated Swift package':
-        shell.contains('config --machine') &&
+    'iOS XCTest target links Flutter generated Swift package':
+        iosProject.contains(
+          'FlutterGeneratedPluginSwiftPackage in RunnerTests Frameworks',
+        ) &&
+        RegExp(
+          r'331C8080294A63A400263BE5 /\* RunnerTests \*/[\s\S]{0,900}'
+          r'packageProductDependencies = \([\s\S]{0,160}'
+          r'78A318222AECB46A00862997',
+        ).hasMatch(iosProject) &&
+        RegExp(
+          r'97C146ED1CF9000F007C117D /\* Runner \*/[\s\S]{0,900}'
+          r'packageProductDependencies = \([\s\S]{0,160}'
+          r'78A3181F2AECB46A00862997',
+        ).hasMatch(iosProject) &&
+        iosProject.contains(
+          'XCLocalSwiftPackageReference '
+          '"Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage"',
+        ) &&
+        iosScheme.contains(
+          r'${FLUTTER_ROOT}/packages/flutter_tools/bin/xcode_backend.sh&quot; '
+          'prepare',
+        ),
+    'iOS XCTest keeps adapter and plugin on one SwiftPM graph':
+        !shell.contains('--no-enable-swift-package-manager') &&
+        !shell.contains('Podfile.lock') &&
         shell.contains('cleanup_ios_xctest') &&
         shell.contains('trap cleanup_ios_xctest EXIT') &&
-        shell.contains('Flutter did not regenerate the empty Swift package') &&
+        shell.contains("grep -Fq 'integration_test'") &&
+        shell.contains("grep -Fq 'simple_torrent_ios'") &&
         shell.contains(
-          "The CocoaPods XCTest adapter still has plugin dependencies",
+          'The iOS XCTest Swift package is missing integration_test or '
+          'simple_torrent_ios.',
         ),
-    'iOS XCTest supervises config changes and cleans isolated DerivedData':
-        shell.contains(r'python3 "$script_dir/run_with_timeout.py" 60 \') &&
+    'iOS XCTest cleans isolated DerivedData':
         shell.contains('Could not allocate isolated Xcode DerivedData') &&
         shell.contains('outside the validated temporary root') &&
         shell.contains(r'rm -rf -- "$xctest_derived_data"'),
@@ -146,7 +165,7 @@ void main() {
         shell.contains('SIMPLE_TORRENT_PREFLIGHT_TIMEOUT_MINUTES') &&
         shell.contains('SIMPLE_TORRENT_BUILD_TIMEOUT_MINUTES') &&
         shell.contains('SIMPLE_TORRENT_PROCESS_TIMEOUT_MINUTES') &&
-        shell.split(r'python3 "$script_dir/run_with_timeout.py"').length >= 8,
+        shell.split(r'python3 "$script_dir/run_with_timeout.py"').length >= 5,
     'shell reports process deadline expiry in structured diagnostics':
         shell.contains('preflightTimeoutMinutes') &&
         shell.contains('processTimeoutMinutes') &&

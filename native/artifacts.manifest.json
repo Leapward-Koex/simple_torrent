@@ -826,8 +826,8 @@
       "files": [
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/Info.plist",
-          "size": 1299,
-          "sha256": "2f5f9b2f7f813feb3a66ecc636363b1ad42e894c3e4c9cba9b3a63ff586dbb9a"
+          "size": 1277,
+          "sha256": "9a6cea18d576395e462fa52327fc1e26e51de8562c741335e8edef5ca690d75c"
         },
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/Headers/module.modulemap",
@@ -840,7 +840,7 @@
           "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
         },
         {
-          "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/libsimple_torrent_native_sim.a",
+          "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/libsimple_torrent_native.a",
           "size": 30077408,
           "sha256": "697294d5d7751b2e9451127da134eb068dd165b12270e5c3741f3e2a4dfd12fd"
         },
@@ -855,7 +855,7 @@
           "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
         },
         {
-          "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/libsimple_torrent_native_merged.a",
+          "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/libsimple_torrent_native.a",
           "size": 30154552,
           "sha256": "6835edd09b30364831d8939f1fc38d3cdd5a6a2dcda48de2e3599781921ecc58"
         }
@@ -1090,8 +1090,8 @@
       "files": [
         {
           "path": "packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/Info.plist",
-          "size": 799,
-          "sha256": "40c6b843d9438eb36893571956fd12780fe080e49ef4cd8f57ec3876c3fe706b"
+          "size": 779,
+          "sha256": "0f9f9b0e17188d0d6b3860c6ca210f9f17621694555bc490ed2942e39e3d9fb8"
         },
         {
           "path": "packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/Headers/module.modulemap",
@@ -1104,7 +1104,7 @@
           "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985"
         },
         {
-          "path": "packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/libsimple_torrent_native_universal.a",
+          "path": "packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/libsimple_torrent_native.a",
           "size": 30086416,
           "sha256": "bba0b75901249433662ffc08dc43ac5462b7395a071dde2a8bf8af411fbd8f7d"
         }
