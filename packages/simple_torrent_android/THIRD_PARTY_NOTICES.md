@@ -8,7 +8,7 @@ linked code from these projects:
 | Component | Pinned version | License (SPDX) |
 | --- | --- | --- |
 | libtorrent | 2.0.12 | BSD-3-Clause |
-| Boost | 1.91.0 | BSL-1.0 |
+| Boost | 1.92.0 | BSL-1.0 |
 | OpenSSL | 3.5.8 | Apache-2.0 |
 | LLVM libc++ / libc++abi | Android NDK 29.0.13113456 | Apache-2.0 WITH LLVM-exception |
 
@@ -21,9 +21,9 @@ and artifact checksums are maintained in the simple_torrent repository's
 `native/artifacts.manifest.json`. libc++ is supplied by the pinned Android NDK
 toolchain recorded there.
 
-When required by the pinned Boost release, the maintainer build applies the
-reviewed Android x86_64 long-double compatibility patch documented in the root
-third-party notices. Its path and checksum are recorded in artifact provenance.
+The pinned Boost release contains the Android x86_64 long-double correction
+upstream in Boost.Math, so this bundle requires no repository-maintained Boost
+patch.
 
 OpenSSL is linked statically to support HTTPS web seeds and secure trackers
 without requiring a host OpenSSL installation. Each component remains subject

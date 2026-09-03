@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "builderVersion": "2.1.1",
+  "builderVersion": "2.1.2",
   "nativeAbi": 2,
   "sourceDateEpoch": 1773440070,
   "dependencies": {
@@ -10,14 +10,9 @@
       "patches": []
     },
     "boost": {
-      "version": "1.91.0",
-      "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
-      "patches": [
-        {
-          "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-          "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
-        }
-      ]
+      "version": "1.92.0",
+      "archiveSha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce",
+      "patches": []
     },
     "openssl": {
       "version": "3.5.8",
@@ -145,17 +140,12 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.1",
+          "builderVersion": "2.1.2",
           "dependencies": {
             "boost": {
-              "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
-              "patches": [
-                {
-                  "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-                  "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
-                }
-              ],
-              "version": "1.91.0"
+              "archiveSha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce",
+              "patches": [],
+              "version": "1.92.0"
             },
             "libtorrent": {
               "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
@@ -195,7 +185,7 @@
             },
             {
               "path": "native/dependencies.lock.json",
-              "sha256": "76831e75aa6bc5d561d77393a9be6656a4218e9e8a4a0a238ec46a29db5c4044",
+              "sha256": "0397d5b521f204bcc1570755b915798132fa03212ba723c405a569ecf8d3dc5e",
               "size": 2269
             },
             {
@@ -207,11 +197,6 @@
               "path": "native/include/simple_torrent_native.h",
               "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985",
               "size": 7878
-            },
-            {
-              "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-              "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547",
-              "size": 712
             },
             {
               "path": "native/src/embedded_ca_bundle.cpp",
@@ -255,13 +240,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
-              "size": 153593
+              "sha256": "c2f0372029c59a94c6c9229d5f865bf591a9233c1180b50546363e30ad498f0f",
+              "size": 151626
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "b08567eb69de80f49408ed00495f09fcdea219cfddb43bdc933c17ca77d3b4d5",
+          "sha256": "f867b896759a0d1864c99b59c8b145512c7cebb77a71c22c658d5c7d27054083",
           "target": "windows"
         },
         "recipe": {
@@ -324,7 +309,7 @@
         {
           "path": "packages/simple_torrent_windows/windows/lib/x64/simple_torrent_native.dll",
           "size": 9245184,
-          "sha256": "6b1ccad1ec50d142b99449b96e84c89667900031490dbb474c786c809a352b05"
+          "sha256": "108abab7d9d61cd71286528dd3a3179750198ae988a0d1c25e2c8e19deb120b2"
         },
         {
           "path": "packages/simple_torrent_windows/windows/lib/x64/simple_torrent_native.lib",
@@ -400,17 +385,12 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.1",
+          "builderVersion": "2.1.2",
           "dependencies": {
             "boost": {
-              "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
-              "patches": [
-                {
-                  "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-                  "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
-                }
-              ],
-              "version": "1.91.0"
+              "archiveSha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce",
+              "patches": [],
+              "version": "1.92.0"
             },
             "libtorrent": {
               "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
@@ -450,7 +430,7 @@
             },
             {
               "path": "native/dependencies.lock.json",
-              "sha256": "76831e75aa6bc5d561d77393a9be6656a4218e9e8a4a0a238ec46a29db5c4044",
+              "sha256": "0397d5b521f204bcc1570755b915798132fa03212ba723c405a569ecf8d3dc5e",
               "size": 2269
             },
             {
@@ -462,11 +442,6 @@
               "path": "native/include/simple_torrent_native.h",
               "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985",
               "size": 7878
-            },
-            {
-              "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-              "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547",
-              "size": 712
             },
             {
               "path": "native/platform/android/simple_torrent_android.cpp",
@@ -515,13 +490,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
-              "size": 153593
+              "sha256": "c2f0372029c59a94c6c9229d5f865bf591a9233c1180b50546363e30ad498f0f",
+              "size": 151626
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "7dcda2ca1f41446928dacdfaa909c61fdac21e3472ec69bc82641ed72a66fb93",
+          "sha256": "3ec17b9add45694d160039f9dbb462119977272cc84c555a099f15878c5515a1",
           "target": "android"
         },
         "recipe": {
@@ -580,18 +555,18 @@
         },
         {
           "path": "packages/simple_torrent_android/android/src/main/jniLibs/arm64-v8a/libsimple_torrent_native.so",
-          "size": 12067432,
-          "sha256": "d1df0d9d20fdcd65fbcd41d6f06cefa9252f2034e9c0a740c470cf8a240e814a"
+          "size": 12099688,
+          "sha256": "c65e2dbc30b8a801e0929834a2f8625d39c5f8441eccd5ec315eb23b7001bd18"
         },
         {
           "path": "packages/simple_torrent_android/android/src/main/jniLibs/armeabi-v7a/libsimple_torrent_native.so",
-          "size": 8617680,
-          "sha256": "bdb4f73087dec5b89eb37a6d381698b5ca73f33ebebadee32cce0529f20c046e"
+          "size": 8639136,
+          "sha256": "e1cce3352b678c180fd0119b42edc3ef052153328f49a3ee858489fd4e4df926"
         },
         {
           "path": "packages/simple_torrent_android/android/src/main/jniLibs/x86_64/libsimple_torrent_native.so",
-          "size": 12234856,
-          "sha256": "5b0f93823866a7b0e5b86a76abf9a78ff778e16526dc5b2645780d983a071dfc"
+          "size": 12265320,
+          "sha256": "dffa5a2321168083881e95fe0c1ec2b43e59236c09bcfa9e2ed156c84242a47d"
         }
       ]
     },
@@ -659,17 +634,12 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.1",
+          "builderVersion": "2.1.2",
           "dependencies": {
             "boost": {
-              "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
-              "patches": [
-                {
-                  "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-                  "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
-                }
-              ],
-              "version": "1.91.0"
+              "archiveSha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce",
+              "patches": [],
+              "version": "1.92.0"
             },
             "libtorrent": {
               "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
@@ -709,7 +679,7 @@
             },
             {
               "path": "native/dependencies.lock.json",
-              "sha256": "76831e75aa6bc5d561d77393a9be6656a4218e9e8a4a0a238ec46a29db5c4044",
+              "sha256": "0397d5b521f204bcc1570755b915798132fa03212ba723c405a569ecf8d3dc5e",
               "size": 2269
             },
             {
@@ -721,11 +691,6 @@
               "path": "native/include/simple_torrent_native.h",
               "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985",
               "size": 7878
-            },
-            {
-              "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-              "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547",
-              "size": 712
             },
             {
               "path": "native/src/embedded_ca_bundle.cpp",
@@ -769,13 +734,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
-              "size": 153593
+              "sha256": "c2f0372029c59a94c6c9229d5f865bf591a9233c1180b50546363e30ad498f0f",
+              "size": 151626
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "790798724fcc92592e04cd7936292d2cc5eac3d6c1f4113a2cd84ab056958832",
+          "sha256": "51bb6ac695799c774a1bdd7a72ecc660fe4c574535c694602740bbb6a6bc41f8",
           "target": "ios"
         },
         "recipe": {
@@ -841,8 +806,8 @@
         },
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64-simulator/libsimple_torrent_native.a",
-          "size": 30077408,
-          "sha256": "697294d5d7751b2e9451127da134eb068dd165b12270e5c3741f3e2a4dfd12fd"
+          "size": 30140952,
+          "sha256": "94907e94ea59c5ede081745ab2fe3fa27f188aaf9ac3fce0202b06adc8bc8968"
         },
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/Headers/module.modulemap",
@@ -856,8 +821,8 @@
         },
         {
           "path": "packages/simple_torrent_ios/ios/simple_torrent_ios/Frameworks/SimpleTorrentNative.xcframework/ios-arm64/libsimple_torrent_native.a",
-          "size": 30154552,
-          "sha256": "6835edd09b30364831d8939f1fc38d3cdd5a6a2dcda48de2e3599781921ecc58"
+          "size": 30218240,
+          "sha256": "f9ebf067e14818fb26ab56c7f0437db205e4a80add06ef97e188bfc9f8a0aea1"
         }
       ]
     },
@@ -924,17 +889,12 @@
               "version": "5.40.2.1"
             }
           },
-          "builderVersion": "2.1.1",
+          "builderVersion": "2.1.2",
           "dependencies": {
             "boost": {
-              "archiveSha256": "5734305f40a76c30f951c9abd409a45a2a19fb546efe4162119250bbe4d3a463",
-              "patches": [
-                {
-                  "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-                  "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547"
-                }
-              ],
-              "version": "1.91.0"
+              "archiveSha256": "c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce",
+              "patches": [],
+              "version": "1.92.0"
             },
             "libtorrent": {
               "archiveSha256": "25b898d02e02e43ee9a8ea5480c20007f129091b5754d0283f94e4d51d11a19e",
@@ -974,7 +934,7 @@
             },
             {
               "path": "native/dependencies.lock.json",
-              "sha256": "76831e75aa6bc5d561d77393a9be6656a4218e9e8a4a0a238ec46a29db5c4044",
+              "sha256": "0397d5b521f204bcc1570755b915798132fa03212ba723c405a569ecf8d3dc5e",
               "size": 2269
             },
             {
@@ -986,11 +946,6 @@
               "path": "native/include/simple_torrent_native.h",
               "sha256": "2f0983135eb15d25c31e942aac9a5bdb677c625eda0786a94b28fdee7ab38985",
               "size": 7878
-            },
-            {
-              "path": "native/patches/boost-1.91.0-android-x86_64-long-double.patch",
-              "sha256": "56ef2a72d3ddc7bc3b2977345c6fd652f6c44ac394480ad49598ae11b5dbf547",
-              "size": 712
             },
             {
               "path": "native/src/embedded_ca_bundle.cpp",
@@ -1034,13 +989,13 @@
             },
             {
               "path": "tool/src/native_builder.dart",
-              "sha256": "7e174630c5f3d18c91c477394bee0271aef06aedc7cbb8af70486adc3e3c12dd",
-              "size": 153593
+              "sha256": "c2f0372029c59a94c6c9229d5f865bf591a9233c1180b50546363e30ad498f0f",
+              "size": 151626
             }
           ],
           "normalization": "utf8-lf-v1",
           "schemaVersion": 1,
-          "sha256": "94b4554b238a4845f801fb8dacb516d5b574b35d1946dfe7afabf049285a2379",
+          "sha256": "87fa9427a7f78f320be4ce86d3dfeb3f26aa2bc52623d8b63bcdaeee82304732",
           "target": "macos"
         },
         "recipe": {
@@ -1105,8 +1060,8 @@
         },
         {
           "path": "packages/simple_torrent_macos/macos/simple_torrent_macos/Frameworks/SimpleTorrentNative.xcframework/macos-arm64/libsimple_torrent_native.a",
-          "size": 30086416,
-          "sha256": "bba0b75901249433662ffc08dc43ac5462b7395a071dde2a8bf8af411fbd8f7d"
+          "size": 30150016,
+          "sha256": "34231bbec93bebe57625aadf1b941a6796fa2796fcace6760a7fc13c03be6033"
         }
       ]
     }

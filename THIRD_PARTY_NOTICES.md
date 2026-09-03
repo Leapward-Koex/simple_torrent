@@ -9,7 +9,7 @@ application developer's machine.
 | Component | Pinned version | License (SPDX) |
 | --- | --- | --- |
 | libtorrent | 2.0.12 | BSD-3-Clause |
-| Boost | 1.91.0 | BSL-1.0 |
+| Boost | 1.92.0 | BSL-1.0 |
 | OpenSSL | 3.5.8 | Apache-2.0 |
 | LLVM libc++ / libc++abi (Android only) | Android NDK 29.0.13113456 | Apache-2.0 WITH LLVM-exception |
 | Mozilla CA certificate bundle | 2026-08-13 | MPL-2.0 |
@@ -21,11 +21,9 @@ hashes in `native/dependencies.lock.json`. Android libc++ comes from the pinned
 NDK installed by the Android SDK manager. License texts and source references
 are in `native/licenses/`.
 
-When required by the pinned Boost release, the builder applies the reviewed,
-repository-tracked Android x86_64 long-double compatibility patch. Applied
-patch paths and checksums are recorded in the authenticated source stamp and
-artifact provenance, so a dependency version change cannot silently reuse a
-patch for a different source release.
+The pinned Boost release contains the Android x86_64 long-double correction
+upstream in Boost.Math, so the bundled sources require no repository-maintained
+Boost patch. Artifact provenance records an empty source-patch inventory.
 
 Release artifacts are built with C++17, DHT and extensions enabled, logging
 and deprecated libtorrent APIs disabled, and OpenSSL linked statically.

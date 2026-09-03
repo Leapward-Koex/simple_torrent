@@ -8,7 +8,7 @@ linked code from these projects:
 | Component | Pinned version | License (SPDX) |
 | --- | --- | --- |
 | libtorrent | 2.0.12 | BSD-3-Clause |
-| Boost | 1.91.0 | BSL-1.0 |
+| Boost | 1.92.0 | BSL-1.0 |
 | OpenSSL | 3.5.8 | Apache-2.0 |
 | Mozilla CA certificate bundle | 2026-08-13 | MPL-2.0 |
 
