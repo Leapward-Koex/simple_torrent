@@ -79,8 +79,8 @@ Future<void> main() async {
   for (final expected in [
     'libtorrent/2.0.12',
     'OpenSSL/3.5.8',
-    'Boost/1_91',
-    'libtorrent=2.0.12;boost=1_91;openssl=3.5.8',
+    'Boost/1_92',
+    'libtorrent=2.0.12;boost=1_92;openssl=3.5.8',
   ]) {
     _expect(
       binaryMarkers.contains(expected),
@@ -442,6 +442,19 @@ Future<void> main() async {
       'packages/simple_torrent_ios/THIRD_PARTY_NOTICES.md',
       'packages/simple_torrent_macos/THIRD_PARTY_NOTICES.md',
     ]) {
+      final retiredPatchNotice = switch (relative) {
+        'THIRD_PARTY_NOTICES.md' =>
+          '\nWhen required by the pinned Boost release, the builder applies the reviewed,\n'
+              'repository-tracked Android x86_64 long-double compatibility patch. Applied\n'
+              'patch paths and checksums are recorded in the authenticated source stamp and\n'
+              'artifact provenance, so a dependency version change cannot silently reuse a\n'
+              'patch for a different source release.\n',
+        'packages/simple_torrent_android/THIRD_PARTY_NOTICES.md' =>
+          '\nWhen required by the pinned Boost release, the maintainer build applies the\n'
+              'reviewed Android x86_64 long-double compatibility patch documented in the root\n'
+              'third-party notices. Its path and checksum are recorded in artifact provenance.\n',
+        _ => '',
+      };
       final notice = File(
         [
           metadataRoot.path,
@@ -451,7 +464,8 @@ Future<void> main() async {
       await notice.parent.create(recursive: true);
       await notice.writeAsString(
         'before\n<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->\n'
-        'stale\n<!-- END GENERATED NATIVE DEPENDENCIES -->\nafter\n',
+        'stale\n<!-- END GENERATED NATIVE DEPENDENCIES -->\nafter\n'
+        '$retiredPatchNotice',
       );
     }
     final metadataBuilder = NativeBuilder.fromRepository(metadataRoot);
@@ -463,11 +477,29 @@ Future<void> main() async {
     final rootNotice = await File(
       '${metadataRoot.path}${Platform.pathSeparator}THIRD_PARTY_NOTICES.md',
     ).readAsString();
+    final iosNotice = await File(
+      '${metadataRoot.path}${Platform.pathSeparator}packages'
+      '${Platform.pathSeparator}simple_torrent_ios'
+      '${Platform.pathSeparator}THIRD_PARTY_NOTICES.md',
+    ).readAsString();
+    final androidNotice = await File(
+      '${metadataRoot.path}${Platform.pathSeparator}packages'
+      '${Platform.pathSeparator}simple_torrent_android'
+      '${Platform.pathSeparator}THIRD_PARTY_NOTICES.md',
+    ).readAsString();
     _expect(
-      rootNotice.contains('| libtorrent | 9.9.9 | BSD-3-Clause |') &&
-          rootNotice.startsWith('before\n') &&
-          rootNotice.endsWith('after\n'),
+      iosNotice.contains('| libtorrent | 9.9.9 | BSD-3-Clause |') &&
+          iosNotice.startsWith('before\n') &&
+          iosNotice.endsWith('after\n'),
       'same-license version changes update only the bounded notice table',
+    );
+    _expect(
+      rootNotice.contains('| Boost | 1.92.0 | BSL-1.0 |') &&
+          rootNotice.contains('contains the Android x86_64 long-double') &&
+          !rootNotice.contains('builder applies the reviewed') &&
+          androidNotice.contains('requires no repository-maintained Boost') &&
+          !androidNotice.contains('maintainer build applies the'),
+      'Boost 1.92 metadata retires the obsolete downstream patch notices',
     );
     (metadataDependencies['libtorrent']! as Map)['license'] = 'MIT';
     await lockFile.writeAsString(jsonEncode(lock));
@@ -650,24 +682,19 @@ Future<void> main() async {
           ),
     ),
     (
-      'rejects a changed canonical patch path',
+      'rejects unexpected dependency patch metadata',
       (manifest) =>
-          ((((manifest['dependencies']! as Map)['boost']! as Map)['patches']!
-                          as List)
-                      .single
-                  as Map)['path'] =
-              'native/patches/other.patch',
+          (((manifest['dependencies']! as Map)['boost']! as Map)['patches']!
+                  as List)
+              .add({
+                'path': 'native/patches/unexpected.patch',
+                'sha256': '0'.padLeft(64, '0'),
+              }),
     ),
     (
-      'rejects a changed canonical patch checksum',
-      (manifest) =>
-          ((((manifest['dependencies']! as Map)['boost']! as Map)['patches']!
-                      as List)
-                  .single
-              as Map)['sha256'] = '0'.padLeft(
-            64,
-            '0',
-          ),
+      'rejects a missing dependency patch inventory',
+      (manifest) => ((manifest['dependencies']! as Map)['boost']! as Map)
+          .remove('patches'),
     ),
     (
       'rejects a stale pinned toolchain',
@@ -908,6 +935,19 @@ Future<void> main() async {
       .readAsString();
   final decodedDependencyLock = (jsonDecode(dependencyLock) as Map)
       .cast<String, Object?>();
+  final pinnedDependencies = (decodedDependencyLock['dependencies']! as Map)
+      .cast<String, Object?>();
+  final pinnedBoost = (pinnedDependencies['boost']! as Map)
+      .cast<String, Object?>();
+  _expect(
+    pinnedBoost['version'] == '1.92.0' &&
+        pinnedBoost['archive'] == 'boost_1_92_0.tar.gz' &&
+        pinnedBoost['url'] ==
+            'https://archives.boost.io/release/1.92.0/source/boost_1_92_0.tar.gz' &&
+        pinnedBoost['sha256'] ==
+            'c4a3b310ddd2472416e091067166b0713be97c63f38c212c484ada022fd296ce',
+    'dependency lock pins the official Boost 1.92.0 source archive',
+  );
   final pinnedToolchains = (decodedDependencyLock['toolchains']! as Map)
       .cast<String, Object?>();
   _expect(
@@ -945,18 +985,22 @@ Future<void> main() async {
         nativeCmake.contains('PROPERTIES TIMEOUT 30'),
     'Windows native suspension CTest is always registered and time-bounded',
   );
-  final boostPatch = File(
-    'native/patches/boost-1.91.0-android-x86_64-long-double.patch',
-  );
-  _expect(boostPatch.existsSync(), 'pinned Boost x86_64 patch exists');
+  final patchDirectory = Directory('native/patches');
+  final patchFiles = patchDirectory.existsSync()
+      ? patchDirectory
+            .listSync(followLinks: false)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.patch'))
+            .toList()
+      : const <File>[];
   _expect(
-    (await boostPatch.readAsString()).contains('LDBL_MANT_DIG == 64'),
-    'Boost patch routes IEEE-128 Android x86_64 long double correctly',
+    patchFiles.isEmpty,
+    'Boost 1.92 uses the upstream Android x86_64 fix without local patches',
   );
   final gitAttributes = await File('.gitattributes').readAsString();
   _expect(
     gitAttributes.contains('/native/patches/*.patch text eol=lf'),
-    'native patch identity uses stable LF bytes on every host',
+    'future native patches use stable LF bytes on every host',
   );
   _expect(
     [
@@ -1023,10 +1067,7 @@ Future<void> main() async {
     "'.simple-torrent-tool.json'",
     '_directoryFingerprint',
     'resolveSymbolicLinksSync',
-    '_sourcePatchRecords',
-    '_sourcePatchesAreApplied',
-    '_expectedBoostLongDoublePatch',
-    "'patches': await _sourcePatchRecords(entry.value)",
+    "'patches': const <Map<String, Object?>>[]",
     'excludedFile: stamp',
     'await pruneUnrequestedAndroidArtifacts(architectures);',
     "environment['LC_ALL'] = 'C';",
@@ -1049,6 +1090,14 @@ Future<void> main() async {
       'Windows Android bootstrap contains $expected',
     );
   }
+  _expect(
+    !builderSource.contains('_applySourcePatches') &&
+        !builderSource.contains('_expectedBoostLongDoublePatch') &&
+        !builderSource.contains(
+          'boost-1.91.0-android-x86_64-long-double.patch',
+        ),
+    'native builder contains no retired Boost 1.91 patch application logic',
+  );
   final copiedAndroidLibrary = builderSource.indexOf(
     'await library.copy(strippedLibrary.path);',
   );
@@ -1367,14 +1416,6 @@ Future<void> _testManifestAssembly(Directory sourceRepository) async {
     await write('native/include/simple_torrent_native.h', 'header\n');
     await write('native/src/simple_torrent_native.cpp', 'source\n');
     await write('native/test/session_suspension_test.cpp', 'test\n');
-    await write(
-      'native/patches/boost-1.91.0-android-x86_64-long-double.patch',
-      await File(
-        '${sourceRepository.path}${Platform.pathSeparator}native'
-        '${Platform.pathSeparator}patches${Platform.pathSeparator}'
-        'boost-1.91.0-android-x86_64-long-double.patch',
-      ).readAsString(),
-    );
     await write('tool/native.dart', 'entry\n');
     await write('tool/native.ps1', 'powershell\n');
     await write('tool/native.sh', 'shell\n');

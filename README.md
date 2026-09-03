@@ -116,22 +116,25 @@ unrequested supported ABI before staging and manifest generation, so a partial
 build cannot relabel an older binary as current. Run `build android` without
 `--arch` to restore the three-ABI release bundle.
 
-The lock pins libtorrent 2.0.12, Boost 1.91.0, OpenSSL 3.5.8 LTS, and Android
+The lock pins libtorrent 2.0.12, Boost 1.92.0, OpenSSL 3.5.8 LTS, and Android
 NDK 29.0.13113456, plus a checksummed 2026-08-13 Mozilla CA extract for Apple.
+Boost 1.92 contains the Android x86_64 long-double correction upstream, so no
+repository-maintained Boost patch is applied.
 OpenSSL is statically linked on every platform. Android also statically links
 the NDK's LLVM libc++ runtime, Windows uses the static MSVC runtime, and Apple
 links the operating system's libc++. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the generated artifact
 manifest for exact versions, flags, checksums, and architectures.
 `verify` checks manifest schema, builder/C-ABI version, dependency archives,
-canonical patch identity, auxiliary inputs, and pinned toolchains against the
-current lock before it authenticates any staged binary. Every platform record
+auxiliary inputs, and pinned toolchains against the current lock before it
+authenticates any staged binary. Every platform record
 also owns the exact build-provenance snapshot and a line-ending-normalized
-fingerprint of the canonical native CMake, headers, sources, patches, and
-builder inputs used for it. Building one platform never refreshes preserved
-platform records; those platforms continue to fail verification until rebuilt
-from the current inputs. Verification also independently inventories each
-target's staging roots and requires exact path-set equality with its manifest;
+fingerprint of the canonical native CMake, headers, sources, tests, platform
+inputs, and builder inputs used for it. Building one platform never refreshes
+preserved platform records; those platforms continue to fail verification
+until rebuilt from the current inputs. Verification also independently
+inventories each target's staging roots and requires exact path-set equality
+with its manifest;
 missing files, unmanifested files, and links are rejected before checksums or
 binary inspection.
 
@@ -220,6 +223,7 @@ dart run tool/test/session_suspension_contract_test.dart
 dart run tool/test/test_runner_contract_test.dart
 dart run tool/test/native_workflow_contract_test.dart
 python3 tool/test/run_with_timeout_test.py
+python3 tool/test/sync_native_notices_from_candidate_test.py
 ```
 
 Repeat analysis/tests in `simple_torrent_platform_interface` and the example;

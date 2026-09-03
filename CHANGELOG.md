@@ -9,6 +9,8 @@
   publication, squash auto-merge, and a stable aggregate smoke gate.
 - Added Windows, Android, ARM64 macOS, and ARM64 iOS Simulator consumer smoke
   coverage, including deterministic loopback transfer suspension tests.
+- Updated Boost to 1.92.0 and removed the Android x86_64 long-double patch now
+  included upstream in Boost.Math.
 
 ## [2.0.0] - 2026-08-30
 

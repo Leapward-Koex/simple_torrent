@@ -5,7 +5,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 const nativeArtifactManifestSchemaVersion = 2;
-const nativeBuilderVersion = '2.1.1';
+const nativeBuilderVersion = '2.1.2';
 const simpleTorrentNativeAbiVersion = 2;
 const nativePlatformProvenanceSchemaVersion = 1;
 const nativeInputFingerprintSchemaVersion = 1;
@@ -14,6 +14,24 @@ const _supportedAndroidArchitectures = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
 const _appleStaticArchiveName = 'libsimple_torrent_native.a';
 const _generatedNoticeStart = '<!-- BEGIN GENERATED NATIVE DEPENDENCIES -->';
 const _generatedNoticeEnd = '<!-- END GENERATED NATIVE DEPENDENCIES -->';
+const _retiredRootBoostPatchNotice =
+    'When required by the pinned Boost release, the builder applies the reviewed,\n'
+    'repository-tracked Android x86_64 long-double compatibility patch. Applied\n'
+    'patch paths and checksums are recorded in the authenticated source stamp and\n'
+    'artifact provenance, so a dependency version change cannot silently reuse a\n'
+    'patch for a different source release.';
+const _rootUpstreamBoostFixNotice =
+    'The pinned Boost release contains the Android x86_64 long-double correction\n'
+    'upstream in Boost.Math, so the bundled sources require no repository-maintained\n'
+    'Boost patch. Artifact provenance records an empty source-patch inventory.';
+const _retiredAndroidBoostPatchNotice =
+    'When required by the pinned Boost release, the maintainer build applies the\n'
+    'reviewed Android x86_64 long-double compatibility patch documented in the root\n'
+    'third-party notices. Its path and checksum are recorded in artifact provenance.';
+const _androidUpstreamBoostFixNotice =
+    'The pinned Boost release contains the Android x86_64 long-double correction\n'
+    'upstream in Boost.Math, so this bundle requires no repository-maintained Boost\n'
+    'patch.';
 
 enum NativeAction {
   build,
@@ -680,12 +698,11 @@ final class NativeBuilder {
       _join(sources.path, '${spec.name}-${spec.version}'),
     );
     final stamp = File(_join(destination.path, '.simple-torrent-source.json'));
-    final patches = await _sourcePatchRecords(spec);
     final identity = <String, Object?>{
       'schemaVersion': 2,
       'archive': spec.archive,
       'sha256': spec.sha256,
-      'patches': patches,
+      'patches': const <Map<String, Object?>>[],
     };
     if (destination.existsSync() && stamp.existsSync()) {
       try {
@@ -696,8 +713,7 @@ final class NativeBuilder {
             destination,
             excludedFile: stamp,
           );
-          if (jsonEncode(value['files']) == jsonEncode(fingerprint) &&
-              await _sourcePatchesAreApplied(spec, destination)) {
+          if (jsonEncode(value['files']) == jsonEncode(fingerprint)) {
             return destination;
           }
         }
@@ -740,7 +756,6 @@ final class NativeBuilder {
         );
       }
     }
-    await _applySourcePatches(spec, destination);
     await stamp.writeAsString(
       '${const JsonEncoder.withIndent('  ').convert({'identity': identity, 'files': await _directoryFingerprint(destination)})}\n',
     );
@@ -748,101 +763,6 @@ final class NativeBuilder {
       await _deleteDirectoryWithin(extracting, cacheRoot);
     }
     return destination;
-  }
-
-  Future<List<Map<String, Object?>>> _sourcePatchRecords(
-    DependencySpec spec,
-  ) async {
-    if (spec.name != 'boost' || spec.version != '1.91.0') return const [];
-    final patch = File(
-      _join(
-        repositoryRoot.path,
-        'native',
-        'patches',
-        'boost-1.91.0-android-x86_64-long-double.patch',
-      ),
-    );
-    if (!patch.existsSync()) {
-      throw StateError('Required Boost compatibility patch is missing.');
-    }
-    final patchText = (await patch.readAsString()).replaceAll('\r\n', '\n');
-    if (patchText != _expectedBoostLongDoublePatch) {
-      throw StateError(
-        'Boost compatibility patch does not match its canonical transform.',
-      );
-    }
-    return [
-      {'path': _relativePath(patch.path), 'sha256': await Sha256.file(patch)},
-    ];
-  }
-
-  static const _boostLongDoubleOriginal =
-      '#elif defined(__i386) || defined(__i386__) || defined(_M_IX86) \\\n'
-      '    || defined(__amd64) || defined(__amd64__)  || defined(_M_AMD64) \\\n'
-      '    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)';
-
-  static const _boostLongDoublePatched =
-      '#elif (LDBL_MANT_DIG == 64) && (defined(__i386) || defined(__i386__) || defined(_M_IX86) \\\n'
-      '    || defined(__amd64) || defined(__amd64__)  || defined(_M_AMD64) \\\n'
-      '    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64))';
-
-  static const _expectedBoostLongDoublePatch =
-      '--- a/boost/math/special_functions/detail/fp_traits.hpp\n'
-      '+++ b/boost/math/special_functions/detail/fp_traits.hpp\n'
-      '@@ -305,9 +305,10 @@ template<> struct fp_traits_non_native<long double, double_precision>\n'
-      ' \n'
-      ' // long double (>64 bits), x86 and x64 -----------------------------------------\n'
-      ' \n'
-      '-#elif defined(__i386) || defined(__i386__) || defined(_M_IX86) \\\n'
-      '+#elif (LDBL_MANT_DIG == 64) && (defined(__i386) || defined(__i386__) || defined(_M_IX86) \\\n'
-      '     || defined(__amd64) || defined(__amd64__)  || defined(_M_AMD64) \\\n'
-      '-    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)\n'
-      '+    || defined(__x86_64) || defined(__x86_64__) || defined(_M_X64))\n'
-      ' \n'
-      ' // Intel extended double precision format (80 bits)\n'
-      ' \n';
-
-  File _boostLongDoubleHeader(Directory source) => File(
-    _join(
-      source.path,
-      'boost',
-      'math',
-      'special_functions',
-      'detail',
-      'fp_traits.hpp',
-    ),
-  );
-
-  Future<bool> _sourcePatchesAreApplied(
-    DependencySpec spec,
-    Directory source,
-  ) async {
-    if (spec.name != 'boost' || spec.version != '1.91.0') return true;
-    final header = _boostLongDoubleHeader(source);
-    if (!header.existsSync()) return false;
-    return (await header.readAsString()).contains(_boostLongDoublePatched);
-  }
-
-  Future<void> _applySourcePatches(
-    DependencySpec spec,
-    Directory source,
-  ) async {
-    if (spec.name != 'boost' || spec.version != '1.91.0') return;
-    final header = _boostLongDoubleHeader(source);
-    if (!header.existsSync()) {
-      throw StateError('Boost fp_traits.hpp is missing; cannot apply patch.');
-    }
-    final content = await header.readAsString();
-    if (content.contains(_boostLongDoublePatched)) return;
-    if (!content.contains(_boostLongDoubleOriginal)) {
-      throw StateError(
-        'Boost fp_traits.hpp no longer matches the pinned patch preimage.',
-      );
-    }
-    _log('Applying Android x86_64 long-double compatibility patch to Boost');
-    await header.writeAsString(
-      content.replaceFirst(_boostLongDoubleOriginal, _boostLongDoublePatched),
-    );
   }
 
   Future<File> _prepareAsset(
@@ -1725,12 +1645,17 @@ final class NativeBuilder {
     for (final relative in [
       ['native', 'include'],
       ['native', 'src'],
-      ['native', 'patches'],
       ['native', 'test'],
     ]) {
       await addDirectory(
         Directory(_joinRelative(repositoryRoot.path, relative.join('/'))),
       );
+    }
+    final optionalPatchDirectory = Directory(
+      _join(repositoryRoot.path, 'native', 'patches'),
+    );
+    if (optionalPatchDirectory.existsSync()) {
+      await addDirectory(optionalPatchDirectory);
     }
     final platformDirectoryName = switch (target) {
       NativeTarget.android => 'android',
@@ -1775,7 +1700,7 @@ final class NativeBuilder {
       dependencyRecords[entry.key] = {
         'version': entry.value.version,
         'archiveSha256': entry.value.sha256,
-        'patches': await _sourcePatchRecords(entry.value),
+        'patches': const <Map<String, Object?>>[],
       };
     }
     final assetRecords = <String, Object?>{};
@@ -2295,11 +2220,23 @@ final class NativeBuilder {
           '$_generatedNoticeStart\n\n'
           '${renderNativeDependencyTable(entry.value)}\n\n'
           '$_generatedNoticeEnd';
-      final updated = content.replaceRange(
+      var updated = content.replaceRange(
         firstStart,
         firstEnd + _generatedNoticeEnd.length,
         replacement,
       );
+      updated = switch (entry.key) {
+        'THIRD_PARTY_NOTICES.md' => updated.replaceFirst(
+          _retiredRootBoostPatchNotice,
+          _rootUpstreamBoostFixNotice,
+        ),
+        'packages/simple_torrent_android/THIRD_PARTY_NOTICES.md' =>
+          updated.replaceFirst(
+            _retiredAndroidBoostPatchNotice,
+            _androidUpstreamBoostFixNotice,
+          ),
+        _ => updated,
+      };
       if (updated != rawContent) await file.writeAsString(updated);
     }
     stdout.writeln(
