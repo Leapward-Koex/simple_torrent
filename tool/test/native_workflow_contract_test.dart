@@ -461,6 +461,18 @@ void main() {
         ),
     'notice synchronization is portable to macOS BSD userland':
         noticeSync.contains(r'chmod 0644 "$output"') &&
+        noticeSync.contains(
+          r"""python3 - "$relative" "$source" "$output" <<'PY'""",
+        ) &&
+        noticeSync.contains(
+          'Candidate native notice contains unsupported changes outside the generated block',
+        ) &&
+        noticeSync.contains(
+          'The pinned Boost release contains the Android x86_64 long-double correction',
+        ) &&
+        noticeSync.contains(
+          'When required by the pinned Boost release, the maintainer build applies',
+        ) &&
         !noticeSync.contains('chmod --reference') &&
         !noticeSync.contains('mv --') &&
         !noticeSync.contains('rm -rf --'),
@@ -489,6 +501,12 @@ void main() {
     'gate behaviorally tests the Unix process supervisor': gate.contains(
       'run: python3 tool/test/run_with_timeout_test.py',
     ),
+    'gate behaviorally tests native notice publication':
+        gate.contains('Validate native notice synchronization') &&
+        gate.contains(
+          'run: python3 tool/test/sync_native_notices_from_candidate_test.py',
+        ) &&
+        gate.contains('tool/test/sync_native_notices_from_candidate_test.py|'),
     'gate checks out LFS content read-only':
         gate.contains('permissions:\n  contents: read') &&
         !gate.contains('contents: write') &&

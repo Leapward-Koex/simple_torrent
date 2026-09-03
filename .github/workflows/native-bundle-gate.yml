@@ -38,6 +38,10 @@ jobs:
         shell: bash
         run: python3 tool/test/run_with_timeout_test.py
 
+      - name: Validate native notice synchronization
+        shell: bash
+        run: python3 tool/test/sync_native_notices_from_candidate_test.py
+
       - name: Classify changed paths
         id: changes
         shell: bash
@@ -78,6 +82,7 @@ jobs:
               tool/test-suspension.sh|\
               tool/run_with_timeout.py|\
               tool/test/run_with_timeout_test.py|\
+              tool/test/sync_native_notices_from_candidate_test.py|\
               tool/src/native_builder.dart|\
               .github/workflows/native-bundle-build.yml|\
               .github/workflows/native-bundle-gate.yml|\
